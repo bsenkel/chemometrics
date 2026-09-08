@@ -88,7 +88,7 @@ outside version 0.1.
 ## Numerical validation
 
 Tests compare selected Savitzky–Golay results against values generated with
-[SciPy 1.17.1](https://docs.scipy.org/doc/scipy-1.17.1/reference/generated/scipy.signal.savgol_filter.html),
+[SciPy 1.18.1](https://docs.scipy.org/doc/scipy-1.18.1/reference/generated/scipy.signal.savgol_filter.html),
 using `deriv=0`, `delta=1.0` and `mode="interp"`. Cases include edge samples,
 signals exactly one window long, and windows of 21, 51 and 101 samples with
 polynomial orders 2 and 3. Agreement is checked per sample using
@@ -96,7 +96,7 @@ polynomial orders 2 and 3. Agreement is checked per sample using
 
 The stored reference values are in `tests/fixtures/scipy.txt`; regenerate them
 with `tests/fixtures/generate.py` in a Python environment containing SciPy
-1.17.1 and NumPy 2.5.2. Rust tests read the stored values and require no Python.
+1.18.1 and NumPy 2.5.2. Rust tests read the stored values and require no Python.
 Reference agreement applies to the tested cases, not every possible input.
 Independent tests also check polynomial preservation, known filter
 coefficients, moving-average results, input validation and numerical failures.

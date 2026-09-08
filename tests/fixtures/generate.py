@@ -1,10 +1,10 @@
-"""Regenerate with Python + scipy==1.17.1 + numpy==2.5.2; unnecessary for Rust tests."""
+"""Regenerate with Python + scipy==1.18.1 + numpy==2.5.2; unnecessary for Rust tests."""
 from pathlib import Path
 import numpy as np
 import scipy
 from scipy.signal import savgol_filter
 
-assert scipy.__version__ == "1.17.1"
+assert scipy.__version__ == "1.18.1"
 assert np.__version__ == "2.5.2"
 rows = [f"# SciPy {scipy.__version__}; numpy {np.__version__}; deriv=0; delta=1; mode=interp"]
 cases = [(9,5,2),(17,7,3),(21,11,4),(7,7,2),(9,3,0),(3,1,0)]
