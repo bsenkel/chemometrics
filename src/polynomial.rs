@@ -39,7 +39,12 @@ pub(crate) fn sum(values: impl Iterator<Item = f64>) -> f64 {
 }
 
 // All evaluation rows, flattened row-major: each row is one filter kernel.
-pub(crate) fn kernels(window: usize, order: usize) -> Result<Vec<f64>, Error> {
+pub(crate) fn kernels(
+    window: usize,
+    order: usize,
+    derivative: usize,
+    spacing: f64,
+) -> Result<Vec<f64>, Error> {
     if window == 1 {
         let mut identity = zeros(1)?;
         identity[0] = 1.0;
@@ -94,6 +99,17 @@ pub(crate) fn kernels(window: usize, order: usize) -> Result<Vec<f64>, Error> {
         a[k * columns + k] = alpha;
         reflectors.push(v);
     }
+    // Divide in this order to avoid overflowing (window - 1) * spacing.
+    let mut scale = 1.0;
+    if derivative > 0 {
+        let step = (2.0 / (window - 1) as f64) / spacing;
+        for _ in 0..derivative {
+            scale *= step;
+        }
+        if !scale.is_finite() || scale == 0.0 {
+            return Err(Error::NumericalFailure);
+        }
+    }
     // Reused across positions; entries beyond `columns` must start at zero.
     let mut weights = zeros(window)?;
     for position in 0..window {
@@ -103,14 +119,26 @@ pub(crate) fn kernels(window: usize, order: usize) -> Result<Vec<f64>, Error> {
         let mut power = 1.0;
         for j in 0..columns {
             let previous = sum((0..j).map(|k| a[k * columns + j] * weights[k]));
-            weights[j] = (power - previous) / a[j * columns + j];
-            power *= x;
+            let basis = if j < derivative {
+                0.0
+            } else {
+                let factor = (0..derivative).fold(1.0, |value, k| value * (j - k) as f64);
+                let basis = factor * power;
+                power *= x;
+                basis
+            };
+            weights[j] = (basis - previous) / a[j * columns + j];
         }
         for k in (0..columns).rev() {
             let v = &reflectors[k];
             let dot = sum(v.iter().enumerate().map(|(r, x)| x * weights[k + r]));
             for (r, x) in v.iter().enumerate() {
                 weights[k + r] -= 2.0 * x * dot;
+            }
+        }
+        if derivative > 0 {
+            for weight in &mut weights {
+                *weight *= scale;
             }
         }
         if weights.iter().any(|x| !x.is_finite()) {
@@ -136,19 +164,25 @@ mod tests {
         );
         // window² fits usize but its f64 byte layout exceeds isize::MAX.
         let window = 1_usize << (usize::BITS / 2 - 1);
-        assert_eq!(kernels(window + 1, 0), Err(Error::AllocationFailure));
-        assert_eq!(kernels(usize::MAX, 0), Err(Error::AllocationFailure));
+        assert_eq!(
+            kernels(window + 1, 0, 0, 1.0),
+            Err(Error::AllocationFailure)
+        );
+        assert_eq!(
+            kernels(usize::MAX, 0, 0, 1.0),
+            Err(Error::AllocationFailure)
+        );
     }
 
     #[test]
     fn known_center_kernel() {
-        let k = kernels(5, 2).unwrap();
+        let k = kernels(5, 2, 0, 1.0).unwrap();
         for (actual, expected) in k[10..15].iter().zip([-3.0, 12.0, 17.0, 12.0, -3.0]) {
             assert!((actual - expected / 35.0).abs() < 1e-12);
         }
     }
     #[test]
     fn rejects_rank_deficient_high_order() {
-        assert_eq!(kernels(101, 100), Err(Error::NumericalFailure));
+        assert_eq!(kernels(101, 100, 0, 1.0), Err(Error::NumericalFailure));
     }
 }

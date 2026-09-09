@@ -1,4 +1,4 @@
-//! Length-preserving smoothing on uniformly sampled `f64` intensities.
+//! Length-preserving smoothing and differentiation of uniformly sampled `f64` signals.
 //!
 //! Windows have positive odd lengths measured in samples. At either edge,
 //! the nearest complete window is used without padding or invented samples.
@@ -118,7 +118,7 @@ impl MovingAverage {
     }
 }
 
-/// Savitzky–Golay smoothing with polynomial evaluation at the edges.
+/// Savitzky–Golay smoothing and differentiation with polynomial evaluation at the edges.
 ///
 /// Fits use coordinates scaled to [-1, 1] and Householder QR. A diagonal
 /// magnitude at or below `f64::EPSILON * max(rows, columns) * ||A||_F`
@@ -154,6 +154,44 @@ impl SavitzkyGolay {
     /// [`Error::AllocationFailure`] if buffer sizes exceed addressable capacity
     /// or the allocator cannot reserve the requested memory.
     pub fn new(window_length: usize, polynomial_order: usize) -> Result<Self, Error> {
+        Self::new_derivative(window_length, polynomial_order, 0, 1.0)
+    }
+
+    /// Prepares a local polynomial derivative filter.
+    ///
+    /// `derivative_order` must not exceed `polynomial_order`. Order zero is
+    /// smoothing, equivalent to [`Self::new`] for any valid `sample_spacing`.
+    /// `sample_spacing` is the constant difference between adjacent x values;
+    /// it must be finite and nonzero, even for order zero. Negative spacing
+    /// supports descending axes and reverses the sign of odd derivatives.
+    /// Output units are input units divided by x units to the derivative order.
+    ///
+    /// Evaluates each local polynomial's derivative, including at the edges.
+    /// Differentiation can amplify noise.
+    ///
+    /// # Errors
+    /// Returns an input error for an invalid window, polynomial order, derivative
+    /// order, or spacing, checked in that order. Returns [`Error::NumericalFailure`]
+    /// for rank deficiency, overflow or complete underflow of derivative scaling,
+    /// or non-finite coefficients. Allocation errors match [`Self::new`].
+    ///
+    /// # Example
+    /// ```
+    /// use chemometrics::smooth::SavitzkyGolay;
+    /// // y = x² at x = 0, 0.5, 1, 1.5, 2; dy/dx = 2x.
+    /// let filter = SavitzkyGolay::new_derivative(5, 2, 1, 0.5)?;
+    /// let result = filter.apply(&[0.0, 0.25, 1.0, 2.25, 4.0])?;
+    /// for (actual, expected) in result.iter().zip([0.0, 1.0, 2.0, 3.0, 4.0]) {
+    ///     assert!((actual - expected).abs() < 1e-10);
+    /// }
+    /// # Ok::<(), chemometrics::Error>(())
+    /// ```
+    pub fn new_derivative(
+        window_length: usize,
+        polynomial_order: usize,
+        derivative_order: usize,
+        sample_spacing: f64,
+    ) -> Result<Self, Error> {
         window_valid(window_length)?;
         if polynomial_order >= window_length {
             return Err(Error::InvalidPolynomialOrder {
@@ -161,9 +199,23 @@ impl SavitzkyGolay {
                 window_length,
             });
         }
+        if derivative_order > polynomial_order {
+            return Err(Error::InvalidDerivativeOrder {
+                derivative_order,
+                polynomial_order,
+            });
+        }
+        if !sample_spacing.is_finite() || sample_spacing == 0.0 {
+            return Err(Error::InvalidSampleSpacing);
+        }
         Ok(Self {
             window_length,
-            kernels: polynomial::kernels(window_length, polynomial_order)?,
+            kernels: polynomial::kernels(
+                window_length,
+                polynomial_order,
+                derivative_order,
+                sample_spacing,
+            )?,
         })
     }
 

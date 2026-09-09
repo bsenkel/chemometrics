@@ -1,4 +1,4 @@
-//! Apply both smoothing filters and reuse an output buffer.
+//! Apply smoothing and derivative filters and reuse an output buffer.
 use chemometrics::smooth::{MovingAverage, SavitzkyGolay};
 
 fn main() -> Result<(), chemometrics::Error> {
@@ -11,5 +11,11 @@ fn main() -> Result<(), chemometrics::Error> {
     println!("Savitzky–Golay: {output:?}");
     // Reuse the same filter and output allocation for another spectrum.
     sg.apply_into(&[1.0; 9], &mut output)?;
+    // The original spectrum is sampled every 0.5 axis units.
+    let derivative = SavitzkyGolay::new_derivative(5, 2, 1, 0.5)?;
+    derivative.apply_into(&signal, &mut output)?;
+    println!("First derivative (intensity / axis unit): {output:?}");
+    SavitzkyGolay::new_derivative(5, 2, 2, 0.5)?.apply_into(&signal, &mut output)?;
+    println!("Second derivative (intensity / axis unit²): {output:?}");
     Ok(())
 }

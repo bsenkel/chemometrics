@@ -13,6 +13,15 @@ pub enum Error {
         /// Requested window length.
         window_length: usize,
     },
+    /// Derivative order must not exceed the polynomial order.
+    InvalidDerivativeOrder {
+        /// Requested derivative order.
+        derivative_order: usize,
+        /// Requested polynomial order.
+        polynomial_order: usize,
+    },
+    /// Sample spacing must be finite and nonzero.
+    InvalidSampleSpacing,
     /// Input contains fewer points than one window.
     SignalTooShort {
         /// Actual input length.
@@ -32,7 +41,8 @@ pub enum Error {
         /// Index of the first non-finite sample.
         index: usize,
     },
-    /// The fit is numerically rank deficient or arithmetic became non-finite.
+    /// The fit is numerically rank deficient, derivative scaling is unrepresentable,
+    /// or arithmetic became non-finite.
     NumericalFailure,
     /// A requested allocation exceeds addressable capacity or could not be reserved.
     AllocationFailure,
@@ -51,6 +61,10 @@ impl fmt::Display for Error {
                 f,
                 "polynomial order {order} must be smaller than window length {window_length}"
             ),
+            Self::InvalidDerivativeOrder { derivative_order, polynomial_order } => write!(
+                f, "derivative order {derivative_order} must not exceed polynomial order {polynomial_order}"
+            ),
+            Self::InvalidSampleSpacing => f.write_str("sample spacing must be finite and nonzero"),
             Self::SignalTooShort {
                 length,
                 window_length,
@@ -64,7 +78,7 @@ impl fmt::Display for Error {
             Self::NonFiniteInput { index } => write!(f, "non-finite input at index {index}"),
             Self::AllocationFailure => f.write_str("requested memory capacity is unavailable"),
             Self::NumericalFailure => {
-                f.write_str("numerical rank deficiency or non-finite arithmetic")
+                f.write_str("numerical rank deficiency, unrepresentable derivative scaling, or non-finite arithmetic")
             }
         }
     }

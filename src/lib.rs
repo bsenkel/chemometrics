@@ -2,6 +2,7 @@
 //! default.
 //!
 //! Start with [`smooth::MovingAverage`] or [`smooth::SavitzkyGolay`].
+//! [`smooth::SavitzkyGolay::new_derivative`] also computes local derivatives.
 //! Filters preserve signal length and shift complete windows at the edges.
 
 mod error;
