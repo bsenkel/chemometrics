@@ -252,5 +252,5 @@ fn scipy_derivative_reference() {
         }
         cases += 1;
     }
-    assert_eq!(cases, 56, "missing derivative reference cases");
+    assert_eq!(cases, 103, "missing derivative reference cases");
 }
