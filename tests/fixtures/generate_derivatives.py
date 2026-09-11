@@ -13,14 +13,14 @@ rows = [
 ]
 
 
+def encode(values):
+    return ",".join(format(float(v), ".17g") for v in values)
+
+
 def add_case(y, window, order, derivative, spacing):
     expected = savgol_filter(y, window, order, deriv=derivative,
                              delta=spacing, mode="interp")
     assert np.isfinite(expected).all()
-
-    def encode(values):
-        return ",".join(format(float(v), ".17g") for v in values)
-
     rows.append(f"{window}|{order}|{derivative}|{spacing}|{encode(y)}|{encode(expected)}")
 
 
@@ -35,15 +35,11 @@ for window, order, derivative in settings:
             add_case(y, window, order, derivative, spacing)
 
 rows.append("# Impulses at every position: each row checks one operator column.")
-for position in range(13):
-    y = np.zeros(13, dtype=np.float64)
-    y[position] = 1.0
-    for derivative in (1, 2):
-        add_case(y, 5, 2, derivative, 1.0)
-for position in range(17):
-    y = np.zeros(17, dtype=np.float64)
-    y[position] = 1.0
-    add_case(y, 7, 3, 2, -0.5)
+for length, window, order, derivatives, spacing in ((13, 5, 2, (1, 2), 1.0),
+                                                    (17, 7, 3, (2,), -0.5)):
+    for y in np.eye(length):
+        for derivative in derivatives:
+            add_case(y, window, order, derivative, spacing)
 
 rows.append("# Random signals: PCG64 seed 20260909; the last has overlapping edge windows.")
 rng = np.random.Generator(np.random.PCG64(20260909))
