@@ -1,5 +1,9 @@
 # chemometrics
 
+[![CI](https://github.com/bsenkel/chemometrics/actions/workflows/ci.yml/badge.svg)](https://github.com/bsenkel/chemometrics/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/chemometrics.svg)](https://crates.io/crates/chemometrics)
+[![docs.rs](https://img.shields.io/docsrs/chemometrics)](https://docs.rs/chemometrics)
+
 Spectral preprocessing in Rust, dependency-free by default. Provides moving
 average smoothing and Savitzky–Golay smoothing and numerical derivatives for
 uniformly sampled `f64` signals.
