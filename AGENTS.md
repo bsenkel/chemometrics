@@ -26,7 +26,7 @@ Keep the default library dependency-free and independent of file formats. Preser
 
 Use Rust's built-in test framework with descriptive names such as `polynomial_preservation_including_edges`. Cover mathematical invariants, edge windows, invalid inputs, buffer preservation, reuse, and numerical failures. There is no percentage coverage threshold.
 
-Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1 and `mode="interp"`; regenerate with `python tests/fixtures/generate.py` in a compatible environment. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
+Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1 and `mode="interp"`; regenerate with `uv run tests/fixtures/generate.py` and `uv run tests/fixtures/generate_derivatives.py`, which install the pinned dependencies declared inline in each script (PEP 723). After changing a generator, rerun it and confirm the fixture diff is empty unless new reference data is intended. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
 
 ## Commit & Pull Request Guidelines
 

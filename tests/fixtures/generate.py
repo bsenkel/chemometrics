@@ -1,4 +1,8 @@
-"""Regenerate with Python + scipy==1.18.1 + numpy==2.5.2; unnecessary for Rust tests."""
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["scipy==1.18.1", "numpy==2.5.2"]
+# ///
+"""Regenerate with `uv run tests/fixtures/generate.py`; unnecessary for Rust tests."""
 from pathlib import Path
 import numpy as np
 import scipy

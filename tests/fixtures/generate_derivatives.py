@@ -1,4 +1,8 @@
-"""Generate derivative references with scipy==1.18.1 and numpy==2.5.2."""
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["scipy==1.18.1", "numpy==2.5.2"]
+# ///
+"""Generate derivative references; run with `uv run tests/fixtures/generate_derivatives.py`."""
 from pathlib import Path
 
 import numpy as np

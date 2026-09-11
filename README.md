@@ -113,13 +113,14 @@ polynomial orders 2 and 3. Agreement is checked per sample using
 `abs(actual - reference) <= 1e-10 + 1e-10 * abs(reference)`.
 
 The stored reference values are in `tests/fixtures/scipy.txt`; regenerate them
-with `tests/fixtures/generate.py` in a Python environment containing SciPy
-1.18.1 and NumPy 2.5.2. Rust tests read the stored values and require no Python.
+with `uv run tests/fixtures/generate.py`, which installs SciPy 1.18.1 and NumPy
+2.5.2 as declared in the script, or run it with Python in an environment with
+those versions. Rust tests read the stored values and require no Python.
 Reference agreement applies to the tested cases, not every possible input.
 Independent tests also check polynomial preservation, known filter
 coefficients, moving-average results, input validation and numerical failures.
 
 Derivative references in `tests/fixtures/scipy_derivatives.txt` use the same
 versions, edge mode and tolerance. Regenerate with
-`python tests/fixtures/generate_derivatives.py`. Analytic tests also verify
+`uv run tests/fixtures/generate_derivatives.py`. Analytic tests also verify
 polynomial derivatives, spacing scaling and axis reversal.
