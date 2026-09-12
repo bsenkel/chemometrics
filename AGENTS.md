@@ -16,6 +16,13 @@
 - `RUSTDOCFLAGS='-D warnings' cargo doc --locked --no-deps`: validate API documentation.
 - `cargo package --locked`: verify packaging from a clean working tree.
 
+## Rust Coding Guidelines
+
+- Prioritize code correctness and clarity. Speed and efficiency are secondary priorities unless otherwise specified.
+- Do not write organizational comments or comments that summarize the code. Comments should only be written in order to explain "why" the code is written in some way in the case there is a reason that is tricky or non-obvious.
+- Prefer implementing functionality in existing files unless it is a new logical component. Avoid creating many small files.
+- Avoid using functions that panic like `unwrap()` in library code, instead use mechanisms like `?` to propagate errors. Tests may `unwrap()` freely.
+
 ## Coding Style & Architecture
 
 Use Rust 2024, maintain Rust 1.85 compatibility, and follow rustfmt's four-space indentation. Use `snake_case` for functions/modules and `PascalCase` for types. Document public APIs and errors in English. Unsafe code is forbidden.
@@ -28,8 +35,23 @@ Use Rust's built-in test framework with descriptive names such as `polynomial_pr
 
 Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1 and `mode="interp"`; regenerate with `uv run tests/fixtures/generate.py` and `uv run tests/fixtures/generate_derivatives.py`, which install the pinned dependencies declared inline in each script (PEP 723). After changing a generator, rerun it and confirm the fixture diff is empty unless new reference data is intended. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
 
+## Conventions
+
+- Follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+- Follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification. The history uses `feat:`, `fix:`, `docs:`, `test:` and `build:` prefixes; only the initial commit predates the convention.
+- Follow the [Semantic Versioning](https://semver.org/) specification.
+- Keep commits focused.
+- Update `CHANGELOG.md` after every meaningful change (new features, bug fixes, breaking changes, deprecations, removals).
+- The `CHANGELOG.md` is user-facing only. Refactoring, test infrastructure and documentation wording are deliberately left to the commit history.
+
 ## Commit & Pull Request Guidelines
 
-No commits exist yet, so no historical convention is established. Use concise imperative subjects, for example `Add baseline correction tests`. Keep changes focused.
+Use a concise imperative subject after the type prefix, for example `test: add baseline correction tests`.
 
 PRs should explain behavior changes, numerical choices, validation performed, and any API compatibility impact. Link relevant issues and update documentation for changed behavior. Publishing to crates.io remains a separate manual action.
+
+## Security
+
+- Never commit credentials, generated build products, or user data.
+- Never expose personally identifiable machine or user information.
+- Never override the configured Git author or committer identity.
