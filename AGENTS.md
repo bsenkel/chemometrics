@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, shared errors in `src/error.rs`, and private Householder-QR and coefficient calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs`; SciPy reference data and its generator live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters. GitHub Actions configuration is in `.github/workflows/ci.yml`.
+`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, shared errors in `src/error.rs`, and private Householder-QR and coefficient calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters and `tests/derivatives.rs` for Savitzky–Golay derivatives; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters and derivatives. GitHub Actions configuration is in `.github/workflows/ci.yml`.
 
 ## Build, Test, and Development Commands
 
