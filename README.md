@@ -110,7 +110,8 @@ outside version 0.1.
 ## Numerical validation
 
 Tests compare selected Savitzky–Golay results against values generated with
-[SciPy 1.18.1](https://docs.scipy.org/doc/scipy-1.18.1/reference/generated/scipy.signal.savgol_filter.html),
+SciPy 1.18.1's
+[`savgol_filter`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.savgol_filter.html),
 using `deriv=0`, `delta=1.0` and `mode="interp"`. Cases include edge samples,
 signals exactly one window long, and windows of 21, 51 and 101 samples with
 polynomial orders 2 and 3. Agreement is checked per sample using
