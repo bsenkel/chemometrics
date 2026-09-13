@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-13
+
 ### Added
 
 - `SavitzkyGolay::new_derivative` for local polynomial derivatives with signed
@@ -29,5 +31,6 @@ Initial release.
 - Documentation, an executable example, MIT license and CI for Linux, macOS,
   Windows and the minimum supported Rust version.
 
-[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bsenkel/chemometrics/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bsenkel/chemometrics/releases/tag/v0.1.0
