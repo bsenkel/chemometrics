@@ -1,5 +1,5 @@
 //! Analytic, synthetic NIR and SciPy reference checks for SNV.
-use chemometrics::{Error, normalize::StandardNormalVariate};
+use chemometrics::{Error, normalize::StandardNormalVariate, smooth::SavitzkyGolay};
 use std::f64::consts::{FRAC_1_SQRT_2, LN_2};
 
 fn close(actual: &[f64], expected: &[f64]) {
@@ -258,4 +258,63 @@ fn scipy_snv_reference() {
         cases += 1;
     }
     assert_eq!(cases, 16, "missing SNV reference cases");
+}
+
+#[test]
+fn derivative_then_snv_removes_scatter_offset_and_linear_baseline() {
+    let sample = nir_like([0.30, 0.55, 0.20, 0.45, 0.15, 0.25]);
+    // Samples are 2 nm apart. The first derivative turns a linear baseline into
+    // a constant, which SNV then removes together with the scaling.
+    let derivative = SavitzkyGolay::new_derivative(11, 2, 1, 2.0).unwrap();
+    let expected = snv(&derivative.apply(&sample).unwrap());
+    for (a, b, slope) in [(0.6, 0.1, 2e-4), (1.6, -0.05, -3e-4), (1.0, 0.8, 0.0)] {
+        let measured: Vec<_> = sample
+            .iter()
+            .enumerate()
+            .map(|(i, x)| a * x + b + slope * (1100.0 + 2.0 * i as f64))
+            .collect();
+        close(&snv(&derivative.apply(&measured).unwrap()), &expected);
+    }
+}
+
+#[test]
+fn impulses_reach_the_largest_possible_standardized_value() {
+    // With divisor n - 1 no sample can exceed (n - 1) / sqrt(n) (Samuelson's
+    // inequality); an impulse attains it and leaves -1 / sqrt(n) elsewhere.
+    for length in [2, 3, 10, 701, 100_000, 1_000_000] {
+        let spike = length / 2;
+        let mut input = vec![0.0; length];
+        input[spike] = 1.0;
+        let root = (length as f64).sqrt();
+        let expected: Vec<_> = (0..length)
+            .map(|i| {
+                if i == spike {
+                    (length as f64 - 1.0) / root
+                } else {
+                    -1.0 / root
+                }
+            })
+            .collect();
+        close(&snv(&input), &expected);
+    }
+}
+
+#[test]
+fn power_of_two_scaling_is_bit_exact() {
+    let input: Vec<_> = (0..57)
+        .map(|i| (i as f64 * 0.37).sin() + 0.01 * i as f64)
+        .collect();
+    let expected = snv(&input);
+    for exponent in [-600_i32, -1, 1, 600] {
+        // Built from bits so that the factor itself is exact.
+        let factor = f64::from_bits(((1023 + exponent) as u64) << 52);
+        let scaled: Vec<_> = input.iter().map(|x| x * factor).collect();
+        assert_eq!(snv(&scaled), expected, "2^{exponent}");
+    }
+}
+
+#[test]
+fn snv_is_idempotent() {
+    let once = snv(&nir_like([0.30, 0.55, 0.20, 0.45, 0.15, 0.25]));
+    close(&snv(&once), &once);
 }

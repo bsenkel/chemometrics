@@ -132,3 +132,53 @@ fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn power_of_two_floor_boundaries() {
+        let largest_subnormal = f64::from_bits((1 << 52) - 1);
+        for (magnitude, expected) in [
+            (1.0, 1.0),
+            (1.5, 1.0),
+            (0.75, 0.5),
+            (3.0, 2.0),
+            (f64::MAX, f64::from_bits(0x7fe << 52)),
+            (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
+            (largest_subnormal, f64::from_bits(1 << 51)),
+            (f64::from_bits(3), f64::from_bits(2)),
+            (f64::from_bits(1), f64::from_bits(1)),
+        ] {
+            assert_eq!(power_of_two_floor(magnitude), expected, "{magnitude:e}");
+        }
+    }
+
+    #[test]
+    fn power_of_two_floor_brackets_its_input() {
+        for bits in [
+            1_u64,
+            7,
+            1 << 40,
+            (1 << 52) + 12_345,
+            0x3ff0_0000_0000_0001,
+            0x7fef_ffff_ffff_fffe,
+        ] {
+            let magnitude = f64::from_bits(bits);
+            let floor = power_of_two_floor(magnitude);
+            let floor_bits = floor.to_bits();
+            let mantissa = floor_bits & ((1 << 52) - 1);
+            let is_power_of_two = if floor_bits >> 52 == 0 {
+                mantissa.count_ones() == 1
+            } else {
+                mantissa == 0
+            };
+            assert!(is_power_of_two, "{magnitude:e}");
+            assert!(
+                floor <= magnitude && magnitude < 2.0 * floor,
+                "{magnitude:e}"
+            );
+        }
+    }
+}
