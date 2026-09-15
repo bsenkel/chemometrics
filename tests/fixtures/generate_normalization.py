@@ -46,11 +46,11 @@ rows.append("# Impulses.")
 for position in (0, 3):
     add_case(np.eye(7)[position])
 
-rows.append("# NIR-like absorbance, 1100-2500 nm at 2 nm: Gaussian bands (centre, FWHM in nm)")
+rows.append("# NIR-like absorbance, 1100-2500 nm at 14 nm: Gaussian bands (centre, FWHM in nm)")
 rows.append("# with uniform amplitudes in [0.05, 0.6], then a * bands + b + slope * (nm - 1100)")
 rows.append("# + noise, a in [0.6, 1.6], b in [0.1, 0.8]; same generator state as above.")
-wavelengths = np.arange(1100.0, 2501.0, 2.0)
-assert len(wavelengths) == 701
+wavelengths = np.arange(1100.0, 2501.0, 14.0)
+assert len(wavelengths) == 101
 bands = ((1210.0, 60.0), (1450.0, 90.0), (1730.0, 50.0),
          (1940.0, 110.0), (2100.0, 80.0), (2310.0, 45.0))
 for noise in (0.0, 1e-4):
