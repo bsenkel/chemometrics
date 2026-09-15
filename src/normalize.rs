@@ -102,15 +102,21 @@ fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         output.fill(0.0);
         return Ok(());
     }
-    // Scaled samples lie in (-2, 2), so deviations and their squares stay
-    // finite near f64::MAX and representable for subnormal spectra.
+    // Scaled samples lie in (-2, 2) and their offsets in (-4, 4), so deviations
+    // and their squares stay finite near f64::MAX and representable for
+    // subnormal spectra.
     let scale = power_of_two_floor(input.iter().fold(0.0_f64, |a, b| a.max(b.abs())));
+    // Samples within a factor of two of the reference differ exactly (Sterbenz
+    // lemma). The mean of these offsets stays representable when the mean of a
+    // large offset with small variation would round away the variation.
+    let reference = first / scale;
+    let shifted = |x: &f64| x / scale - reference;
     let count = input.len() as f64;
-    let mean = polynomial::sum(input.iter().map(|x| x / scale)) / count;
+    let mean = polynomial::sum(input.iter().map(shifted)) / count;
     // Two passes instead of mean(y²) - mean(y)², which cancels most digits
     // for spectra with a large offset and small variation.
     let variance = polynomial::sum(input.iter().map(|x| {
-        let deviation = x / scale - mean;
+        let deviation = shifted(x) - mean;
         deviation * deviation
     })) / (count - 1.0);
     let deviation = variance.sqrt();
@@ -118,7 +124,7 @@ fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         return Err(Error::NumericalFailure);
     }
     for (out, x) in output.iter_mut().zip(input) {
-        let value = (x / scale - mean) / deviation;
+        let value = (shifted(x) - mean) / deviation;
         if !value.is_finite() {
             return Err(Error::NumericalFailure);
         }

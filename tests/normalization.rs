@@ -141,13 +141,29 @@ fn extreme_values_stay_finite_and_correct() {
     let tiny = f64::from_bits(1);
     close(&snv(&[0.0, tiny]), &[-FRAC_1_SQRT_2, FRAC_1_SQRT_2]);
     close(&snv(&[tiny, 2.0 * tiny, 3.0 * tiny]), &[-1.0, 0.0, 1.0]);
-    // Variation of 1e-9 on an offset of 3 is near the input's own resolution;
-    // the two-pass variance still yields unit moments.
+    // Subtracting 3 is exact here (Sterbenz lemma), so a tiny variation on a
+    // large offset must normalize like the variation alone.
     let offset: Vec<_> = (0..101)
         .map(|i| 3.0 + 1e-9 * (i as f64 * 0.7).sin())
         .collect();
-    let (mean, sd) = mean_and_sample_sd(&snv(&offset));
-    assert!(mean.abs() < 1e-5 && (sd - 1.0).abs() < 1e-5, "{mean}, {sd}");
+    let variation: Vec<_> = offset.iter().map(|x| x - 3.0).collect();
+    close(&snv(&offset), &snv(&variation));
+}
+
+#[test]
+fn ulp_spaced_samples_on_large_offsets_are_exact() {
+    let sd = (5.0_f64 / 3.0).sqrt();
+    let expected: Vec<_> = [-1.5, -0.5, 0.5, 1.5].iter().map(|x| x / sd).collect();
+    // Each step is the spacing of adjacent doubles at the offset; 2^26 * EPSILON
+    // is that spacing at 1e8.
+    for (offset, step) in [
+        (1.0, f64::EPSILON),
+        (-1.0, f64::EPSILON),
+        (1e8, 67_108_864.0 * f64::EPSILON),
+    ] {
+        let input: Vec<_> = (0..4).map(|k| offset + k as f64 * step).collect();
+        close(&snv(&input), &expected);
+    }
 }
 
 #[test]
