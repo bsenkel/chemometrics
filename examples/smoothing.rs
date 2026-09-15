@@ -1,5 +1,8 @@
-//! Apply smoothing and derivative filters and reuse an output buffer.
-use chemometrics::smooth::{MovingAverage, SavitzkyGolay};
+//! Apply smoothing, derivative and SNV transformations and reuse an output buffer.
+use chemometrics::{
+    normalize::StandardNormalVariate,
+    smooth::{MovingAverage, SavitzkyGolay},
+};
 
 fn main() -> Result<(), chemometrics::Error> {
     let signal = [2.0, 2.0, 5.0, 2.0, 1.0, 0.0, 1.0, 4.0, 9.0];
@@ -17,5 +20,7 @@ fn main() -> Result<(), chemometrics::Error> {
     println!("First derivative (intensity / axis unit): {output:?}");
     SavitzkyGolay::new_derivative(5, 2, 2, 0.5)?.apply_into(&signal, &mut output)?;
     println!("Second derivative (intensity / axis unit²): {output:?}");
+    let normalized = StandardNormalVariate.apply(&output)?;
+    println!("SNV of the second derivative: {normalized:?}");
     Ok(())
 }

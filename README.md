@@ -6,7 +6,8 @@
 
 Spectral preprocessing in Rust, dependency-free by default. Provides moving
 average smoothing and Savitzky–Golay smoothing and numerical derivatives for
-uniformly sampled `f64` signals.
+uniformly sampled `f64` signals, and standard normal variate (SNV)
+normalization of spectra.
 
 ```rust
 use chemometrics::smooth::{MovingAverage, SavitzkyGolay};
@@ -54,6 +55,26 @@ nonzero, even for order zero. Negative spacing supports descending axes.
 Derivatives scale with `1 / spacing^d` and have units of intensity / axis units^d.
 Differentiation can amplify noise; window length controls the smoothing.
 
+## Standard normal variate
+
+```rust
+use chemometrics::{normalize::StandardNormalVariate, smooth::SavitzkyGolay};
+
+// Absorbance sampled every 2 nm: first derivative, then SNV.
+let absorbance = [0.52, 0.55, 0.61, 0.70, 0.78, 0.83, 0.84, 0.81, 0.74, 0.66, 0.60];
+let derivative = SavitzkyGolay::new_derivative(5, 2, 1, 2.0)?.apply(&absorbance)?;
+let normalized = StandardNormalVariate.apply(&derivative)?;
+# Ok::<(), chemometrics::Error>(())
+```
+
+SNV centers each spectrum on its mean and divides it by its sample standard
+deviation, with divisor `n - 1` as in R's `sd` and
+`scipy.stats.zscore(x, ddof=1)`. Tools dividing by `n` return values larger by
+`sqrt(n / (n - 1))`. Multiplicative scaling and constant offsets cancel; a
+sloping baseline does not. A constant spectrum yields zeros, and at least two
+samples are required (`Error::TooFewSamples`). SNV needs no x-axis, holds no
+parameters and takes O(n) time.
+
 ## Signal and edge conventions
 
 Window lengths are positive odd numbers of samples. The input must contain
@@ -88,7 +109,7 @@ polynomial orders (typically 2 or 3); arbitrary high-order fits are not promised
 
 Planned areas of development, without a fixed release schedule or ordering:
 
-- Spectral normalization
+- Further spectral normalization (vector, area, min–max)
 - Baseline correction
 - Peak detection
 - PCA and PLS through optional features
@@ -129,3 +150,11 @@ Derivative references in `tests/fixtures/scipy_derivatives.txt` use the same
 versions, edge mode and tolerance. Regenerate with
 `uv run tests/fixtures/generate_derivatives.py`. Analytic tests also verify
 polynomial derivatives, spacing scaling and axis reversal.
+
+SNV references in `tests/fixtures/scipy_snv.txt` use `scipy.stats.zscore` with
+`ddof=1`, the same versions and tolerance. Cases include random signals,
+large offsets, impulses and synthetic NIR-like absorbance spectra: Gaussian
+overtone and combination bands with multiplicative scatter, offset, baseline
+slope and noise. Regenerate with `uv run tests/fixtures/generate_normalization.py`.
+Analytic tests also verify unit moments, removal of scaling and offsets on
+NIR-like spectra, constant spectra and extreme values.

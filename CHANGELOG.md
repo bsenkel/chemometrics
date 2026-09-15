@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `normalize::StandardNormalVariate` for per-spectrum SNV normalization with
+  the sample standard deviation, validated against analytic results and SciPy
+  references.
+- `Error::TooFewSamples` for inputs shorter than an operation requires.
+
 ## [0.1.1] - 2026-09-13
 
 ### Added

@@ -29,6 +29,13 @@ pub enum Error {
         /// Required minimum length.
         window_length: usize,
     },
+    /// Input contains fewer samples than the operation requires.
+    TooFewSamples {
+        /// Actual input length.
+        length: usize,
+        /// Required minimum length.
+        minimum: usize,
+    },
     /// Output length differs from input length.
     OutputLengthMismatch {
         /// Required output length.
@@ -72,6 +79,9 @@ impl fmt::Display for Error {
                 f,
                 "signal length {length} is smaller than window length {window_length}"
             ),
+            Self::TooFewSamples { length, minimum } => {
+                write!(f, "at least {minimum} samples are required, got {length}")
+            }
             Self::OutputLengthMismatch { expected, actual } => {
                 write!(f, "output length must be {expected}, got {actual}")
             }
