@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, shared errors in `src/error.rs`, and private Householder-QR and coefficient calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters and `tests/derivatives.rs` for Savitzky–Golay derivatives; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters and derivatives. GitHub Actions configuration is in `.github/workflows/ci.yml`.
+`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, per-spectrum normalization in `src/normalize.rs`, shared errors in `src/error.rs`, and private Householder-QR and coefficient calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters and `tests/derivatives.rs` for Savitzky–Golay derivatives and `tests/normalization.rs` for SNV; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters, derivatives and SNV. GitHub Actions configuration is in `.github/workflows/ci.yml`.
 
 ## Build, Test, and Development Commands
 
@@ -33,7 +33,7 @@ Keep the default library dependency-free and independent of file formats. Preser
 
 Use Rust's built-in test framework with descriptive names such as `polynomial_preservation_including_edges`. Cover mathematical invariants, edge windows, invalid inputs, buffer preservation, reuse, and numerical failures. There is no percentage coverage threshold.
 
-Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1 and `mode="interp"`; regenerate with `uv run tests/fixtures/generate.py` and `uv run tests/fixtures/generate_derivatives.py`, which install the pinned dependencies declared inline in each script (PEP 723). After changing a generator, rerun it and confirm the fixture diff is empty unless new reference data is intended. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
+Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1, with `mode="interp"` for Savitzky–Golay and `zscore(x, ddof=1)` for SNV; regenerate with `uv run tests/fixtures/generate.py`, `uv run tests/fixtures/generate_derivatives.py` and `uv run tests/fixtures/generate_normalization.py`, which install the pinned dependencies declared inline in each script (PEP 723). After changing a generator, rerun it and confirm the fixture diff is empty unless new reference data is intended. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
 
 ## Conventions
 
