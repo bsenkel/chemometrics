@@ -3,9 +3,9 @@
 //!
 //! Start with [`smooth::MovingAverage`] or [`smooth::SavitzkyGolay`].
 //! [`smooth::SavitzkyGolay::new_derivative`] also computes local derivatives.
+//! Filters preserve signal length and shift complete windows at the edges.
 //! [`normalize::StandardNormalVariate`] removes multiplicative scaling and
 //! constant offsets from each spectrum.
-//! Filters preserve signal length and shift complete windows at the edges.
 
 mod error;
 pub mod normalize;

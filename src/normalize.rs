@@ -25,8 +25,9 @@ fn validate(input: &[f64], output_len: usize) -> Result<(), Error> {
 
 /// Largest power of two not above a positive, finite `magnitude`.
 ///
-/// Division by a power of two is exact, so scaling cannot merge distinct
-/// samples or change the result beyond what unscaled arithmetic would give.
+/// Division by a power of two is exact whenever the quotient is a normal
+/// number. Only samples many orders of magnitude below the largest one can
+/// round, and their contribution to the result is negligible.
 fn power_of_two_floor(magnitude: f64) -> f64 {
     let bits = magnitude.to_bits();
     let exponent = bits & (0x7ff << 52);
