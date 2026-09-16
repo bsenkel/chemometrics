@@ -33,7 +33,7 @@ def add_case(y):
 
 rows.append("# Random signals: PCG64 seed 20260915; the last is shifted negative.")
 rng = np.random.Generator(np.random.PCG64(20260915))
-for length in (2, 3, 7, 101, 1000):
+for length in (2, 3, 7, 101, 250):
     add_case(rng.standard_normal(length))
 add_case(rng.standard_normal(101) - 5.0)
 
