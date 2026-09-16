@@ -95,21 +95,19 @@ impl StandardNormalVariate {
 
 /// Assumes `validate` already accepted these slices.
 fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-    let first = input[0];
-    if input.iter().all(|&x| x == first) {
-        // A compensated mean of identical values need not be bit-exact, and
-        // dividing its residual deviations would produce arbitrary values.
-        output.fill(0.0);
-        return Ok(());
-    }
     // Scaled samples lie in (-2, 2) and their offsets in (-4, 4), so deviations
     // and their squares stay finite near f64::MAX and representable for
     // subnormal spectra.
-    let scale = power_of_two_floor(input.iter().fold(0.0_f64, |a, b| a.max(b.abs())));
+    let magnitude = input.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
+    let scale = if magnitude == 0.0 {
+        1.0
+    } else {
+        power_of_two_floor(magnitude)
+    };
     // Samples within a factor of two of the reference differ exactly (Sterbenz
     // lemma). The mean of these offsets stays representable when the mean of a
     // large offset with small variation would round away the variation.
-    let reference = first / scale;
+    let reference = input[0] / scale;
     let shifted = |x: &f64| x / scale - reference;
     let count = input.len() as f64;
     let mean = polynomial::sum(input.iter().map(shifted)) / count;
@@ -119,12 +117,15 @@ fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         let deviation = shifted(x) - mean;
         deviation * deviation
     })) / (count - 1.0);
-    let deviation = variance.sqrt();
-    if !deviation.is_finite() || deviation <= 0.0 {
-        return Err(Error::NumericalFailure);
+    if variance == 0.0 {
+        // Exact offsets leave zero variance only for a constant spectrum, which
+        // has no spread to divide by.
+        output.fill(0.0);
+        return Ok(());
     }
+    let standard_deviation = variance.sqrt();
     for (out, x) in output.iter_mut().zip(input) {
-        let value = (shifted(x) - mean) / deviation;
+        let value = (shifted(x) - mean) / standard_deviation;
         if !value.is_finite() {
             return Err(Error::NumericalFailure);
         }
@@ -149,36 +150,17 @@ mod tests {
             (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
             (largest_subnormal, f64::from_bits(1 << 51)),
             (f64::from_bits(3), f64::from_bits(2)),
+            (f64::from_bits(7), f64::from_bits(4)),
+            (f64::from_bits(1 << 40), f64::from_bits(1 << 40)),
             (f64::from_bits(1), f64::from_bits(1)),
+            (f64::from_bits((1 << 52) + 12_345), f64::MIN_POSITIVE),
+            (f64::from_bits(0x3ff0_0000_0000_0001), 1.0),
+            (
+                f64::from_bits(0x7fef_ffff_ffff_fffe),
+                f64::from_bits(0x7fe << 52),
+            ),
         ] {
             assert_eq!(power_of_two_floor(magnitude), expected, "{magnitude:e}");
-        }
-    }
-
-    #[test]
-    fn power_of_two_floor_brackets_its_input() {
-        for bits in [
-            1_u64,
-            7,
-            1 << 40,
-            (1 << 52) + 12_345,
-            0x3ff0_0000_0000_0001,
-            0x7fef_ffff_ffff_fffe,
-        ] {
-            let magnitude = f64::from_bits(bits);
-            let floor = power_of_two_floor(magnitude);
-            let floor_bits = floor.to_bits();
-            let mantissa = floor_bits & ((1 << 52) - 1);
-            let is_power_of_two = if floor_bits >> 52 == 0 {
-                mantissa.count_ones() == 1
-            } else {
-                mantissa == 0
-            };
-            assert!(is_power_of_two, "{magnitude:e}");
-            assert!(
-                floor <= magnitude && magnitude < 2.0 * floor,
-                "{magnitude:e}"
-            );
         }
     }
 }
