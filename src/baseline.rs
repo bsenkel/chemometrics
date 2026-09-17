@@ -63,7 +63,8 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
 /// a spectrum does not change the result. Strong bands pull the fit towards
 /// themselves and are therefore damped along with the baseline; low orders limit
 /// this. Orders above roughly 3 fit band structure rather than a baseline, and
-/// very high orders fail with [`Error::NumericalFailure`].
+/// orders of a few dozen degrees fail with [`Error::NumericalFailure`]; that
+/// limit falls as a spectrum grows longer.
 ///
 /// A spectrum needs at least `order + 1` samples. With exactly that many, the
 /// polynomial passes through every sample and the result is zeros. Application
@@ -152,9 +153,13 @@ impl Detrend {
         for degree in 0..=self.polynomial_order {
             let basis = |i: usize| gram(degree, coordinate(i), count);
             let square = polynomial::sum((0..input.len()).map(|i| basis(i) * basis(i)));
-            // Gram polynomials shrink geometrically with their degree; once
-            // their norm reaches rounding level the projection is meaningless.
-            if !square.is_finite() || square <= f64::EPSILON * count {
+            // Gram polynomials shrink geometrically with their degree while the
+            // recurrence rounds at the magnitude of its first terms, so beyond
+            // roughly 50 degrees their values are noise. The scale-dependent
+            // threshold of `polynomial::kernels`, with `sqrt(count)` the norm of
+            // the constant basis polynomial, rejects such degrees.
+            let norm = square.sqrt();
+            if !norm.is_finite() || norm <= f64::EPSILON * count * count.sqrt() {
                 return Err(Error::NumericalFailure);
             }
             let projection =

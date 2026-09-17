@@ -309,9 +309,26 @@ fn extreme_values_stay_finite_or_fail() {
 
 #[test]
 fn excessive_order_is_rejected() {
+    // The usable order ends where the Gram basis reaches rounding level, a few
+    // dozen degrees in, earlier for longer spectra. These cases bracket that
+    // limit without pinning it: a high but usable order still fits.
+    for length in [101, 1001] {
+        let input = wavy(length);
+        let usable = Detrend::new(20).apply(&input).unwrap();
+        assert!(usable.iter().all(|x| x.is_finite()), "length {length}");
+        assert_eq!(
+            Detrend::new(60).apply(&input),
+            Err(Error::NumericalFailure),
+            "length {length}"
+        );
+    }
+    // Rejection comes from the basis, not from a spectrum that is too short.
     assert_eq!(
-        Detrend::new(60).apply(&wavy(101)),
-        Err(Error::NumericalFailure)
+        Detrend::new(60).apply(&wavy(40)),
+        Err(Error::TooFewSamples {
+            length: 40,
+            minimum: 61
+        })
     );
 }
 

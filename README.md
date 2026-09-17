@@ -99,8 +99,9 @@ and curved baselines in near-infrared spectra.
 Every polynomial up to the fitted order is removed exactly, so adding one to a
 spectrum leaves the result unchanged. Strong bands pull the fit towards
 themselves and are damped along with the baseline; low orders limit this, and
-orders above roughly 3 fit band structure rather than a baseline. Very high
-orders fail with `Error::NumericalFailure`. A spectrum needs at least
+orders above roughly 3 fit band structure rather than a baseline. Orders of a
+few dozen degrees fail with `Error::NumericalFailure`, a limit that falls as a
+spectrum grows longer. A spectrum needs at least
 `order + 1` samples (`Error::TooFewSamples`); with exactly that many the fit
 passes through every sample and the result is zeros. Savitzky–Golay derivatives
 are the alternative that needs no fit at all: the first removes offsets and the
@@ -108,8 +109,8 @@ second also removes slopes.
 
 Detrending holds only its order, so one value corrects spectra of any length.
 `apply_into` writes into a caller-owned buffer without allocating. Both take
-O(n × order²) time and no extra memory, using Gram polynomials evaluated from
-their recurrence.
+O(n × order²) time and no working memory beyond the output, using Gram
+polynomials evaluated from their recurrence.
 
 ## Signal and edge conventions
 
