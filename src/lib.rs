@@ -5,8 +5,10 @@
 //! [`smooth::SavitzkyGolay::new_derivative`] also computes local derivatives.
 //! Filters preserve signal length and shift complete windows at the edges.
 //! [`normalize::StandardNormalVariate`] removes multiplicative scaling and
-//! constant offsets from each spectrum.
+//! constant offsets from each spectrum, and [`baseline::Detrend`] subtracts a
+//! fitted polynomial baseline.
 
+pub mod baseline;
 mod error;
 pub mod normalize;
 mod polynomial;
