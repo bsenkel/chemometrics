@@ -6,8 +6,8 @@
 
 Spectral preprocessing in Rust, dependency-free by default. Provides moving
 average smoothing and Savitzky–Golay smoothing and numerical derivatives for
-uniformly sampled `f64` signals, and standard normal variate (SNV)
-normalization of spectra.
+uniformly sampled `f64` signals, standard normal variate (SNV) normalization
+and polynomial detrending of spectra.
 
 ```rust
 use chemometrics::smooth::{MovingAverage, SavitzkyGolay};
@@ -71,9 +71,45 @@ SNV centers each spectrum on its mean and divides it by its sample standard
 deviation, with divisor `n - 1` as in R's `sd` and
 `scipy.stats.zscore(x, ddof=1)`. Tools dividing by `n` return values larger by
 `sqrt(n / (n - 1))`. Multiplicative scaling and constant offsets cancel; a
-sloping baseline does not. A constant spectrum yields zeros, and at least two
+sloping baseline does not, which is what detrending below is for. A constant spectrum yields zeros, and at least two
 samples are required (`Error::TooFewSamples`). SNV needs no x-axis, holds no
 parameters and takes O(n) time.
+
+## Detrend
+
+```rust
+use chemometrics::{baseline::Detrend, normalize::StandardNormalVariate};
+
+// SNV and Detrend: scatter correction, then a quadratic baseline.
+let absorbance = [0.52, 0.55, 0.61, 0.70, 0.78, 0.83, 0.84, 0.81, 0.74, 0.66, 0.60];
+let normalized = StandardNormalVariate.apply(&absorbance)?;
+let corrected = Detrend::new(2).apply(&normalized)?;
+# Ok::<(), chemometrics::Error>(())
+```
+
+`Detrend` fits a least-squares polynomial to a whole spectrum and subtracts it.
+The fit uses the sample position scaled to `[-1, 1]`, which under uniform
+sampling is the same fit as over the wavelength axis, ascending or descending,
+so no x values are needed. Order 0 subtracts the mean, order 1 a straight line
+and order 2 a parabola. Orders 0 and 1 match `scipy.signal.detrend` with
+`type="constant"` and `type="linear"`; order 2 after SNV is the detrending step
+of Barnes, Dhanoa and Lister's SNV and Detrend, the usual treatment of scatter
+and curved baselines in near-infrared spectra.
+
+Every polynomial up to the fitted order is removed exactly, so adding one to a
+spectrum leaves the result unchanged. Strong bands pull the fit towards
+themselves and are damped along with the baseline; low orders limit this, and
+orders above roughly 3 fit band structure rather than a baseline. Very high
+orders fail with `Error::NumericalFailure`. A spectrum needs at least
+`order + 1` samples (`Error::TooFewSamples`); with exactly that many the fit
+passes through every sample and the result is zeros. Savitzky–Golay derivatives
+are the alternative that needs no fit at all: the first removes offsets and the
+second also removes slopes.
+
+Detrending holds only its order, so one value corrects spectra of any length.
+`apply_into` writes into a caller-owned buffer without allocating. Both take
+O(n × order²) time and no extra memory, using Gram polynomials evaluated from
+their recurrence.
 
 ## Signal and edge conventions
 
@@ -110,12 +146,12 @@ polynomial orders (typically 2 or 3); arbitrary high-order fits are not promised
 Planned areas of development, without a fixed release schedule or ordering:
 
 - Further spectral normalization (vector, area, min–max)
-- Baseline correction
+- Further baseline correction (asymmetric least squares, rubberband)
 - Peak detection
 - PCA and PLS through optional features
 
 The default functionality will remain dependency-free. These capabilities are
-not implemented in version 0.1.
+not implemented yet.
 
 ## Extension boundaries
 
@@ -158,3 +194,13 @@ overtone and combination bands with multiplicative scatter, offset, baseline
 slope and noise. Regenerate with `uv run tests/fixtures/generate_normalization.py`.
 Analytic tests also verify unit moments, removal of scaling and offsets on
 NIR-like spectra, constant spectra and extreme values.
+
+Detrend references in `tests/fixtures/scipy_detrend.txt` are the residuals of
+`numpy.polynomial.polynomial.polyfit` on the same scaled coordinate, using the
+same versions and tolerance, and are cross-checked against `scipy.signal.detrend`
+for orders 0 and 1. Cases cover orders 0 to 3, spectra of exactly `order + 1`
+samples, large offsets, strong trends and NIR-like spectra with sloping and
+curved baselines. Regenerate with `uv run tests/fixtures/generate_baseline.py`.
+Analytic tests also verify exact removal of polynomials up to the fitted order,
+orthogonality of the residual, invariance, idempotence, axis reversal and
+extreme values.

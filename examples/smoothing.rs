@@ -1,5 +1,6 @@
-//! Apply smoothing, derivative and SNV transformations and reuse an output buffer.
+//! Apply smoothing, derivative, SNV and detrending steps and reuse an output buffer.
 use chemometrics::{
+    baseline::Detrend,
     normalize::StandardNormalVariate,
     smooth::{MovingAverage, SavitzkyGolay},
 };
@@ -22,5 +23,8 @@ fn main() -> Result<(), chemometrics::Error> {
     println!("Second derivative (intensity / axis unit²): {output:?}");
     let normalized = StandardNormalVariate.apply(&output)?;
     println!("SNV of the second derivative: {normalized:?}");
+    // SNV and Detrend: scatter correction, then a quadratic baseline.
+    let corrected = Detrend::new(2).apply(&StandardNormalVariate.apply(&signal)?)?;
+    println!("SNV and Detrend of the spectrum: {corrected:?}");
     Ok(())
 }
