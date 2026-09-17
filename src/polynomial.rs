@@ -38,6 +38,33 @@ pub(crate) fn sum(values: impl Iterator<Item = f64>) -> f64 {
     total
 }
 
+/// Largest power of two not above a positive, finite `magnitude`.
+///
+/// Division by a power of two is exact whenever the quotient is a normal
+/// number. Only samples many orders of magnitude below the largest one can
+/// round, and their contribution to the result is negligible.
+fn power_of_two_floor(magnitude: f64) -> f64 {
+    let bits = magnitude.to_bits();
+    let exponent = bits & (0x7ff << 52);
+    if exponent == 0 {
+        // Subnormal: keep only the highest set mantissa bit.
+        f64::from_bits(1 << (63 - bits.leading_zeros()))
+    } else {
+        f64::from_bits(exponent)
+    }
+}
+
+/// Power-of-two scale that keeps `input` and differences of its samples within
+/// a small, exactly representable range. Returns `1.0` for an all-zero input.
+pub(crate) fn scale(input: &[f64]) -> f64 {
+    let magnitude = input.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
+    if magnitude == 0.0 {
+        1.0
+    } else {
+        power_of_two_floor(magnitude)
+    }
+}
+
 // All evaluation rows, flattened row-major: each row is one filter kernel.
 pub(crate) fn kernels(
     window: usize,
@@ -152,6 +179,38 @@ pub(crate) fn kernels(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn power_of_two_floor_boundaries() {
+        let largest_subnormal = f64::from_bits((1 << 52) - 1);
+        for (magnitude, expected) in [
+            (1.0, 1.0),
+            (1.5, 1.0),
+            (0.75, 0.5),
+            (3.0, 2.0),
+            (f64::MAX, f64::from_bits(0x7fe << 52)),
+            (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
+            (largest_subnormal, f64::from_bits(1 << 51)),
+            (f64::from_bits(3), f64::from_bits(2)),
+            (f64::from_bits(7), f64::from_bits(4)),
+            (f64::from_bits(1 << 40), f64::from_bits(1 << 40)),
+            (f64::from_bits(1), f64::from_bits(1)),
+            (f64::from_bits((1 << 52) + 12_345), f64::MIN_POSITIVE),
+            (f64::from_bits(0x3ff0_0000_0000_0001), 1.0),
+            (
+                f64::from_bits(0x7fef_ffff_ffff_fffe),
+                f64::from_bits(0x7fe << 52),
+            ),
+        ] {
+            assert_eq!(power_of_two_floor(magnitude), expected, "{magnitude:e}");
+        }
+    }
+
+    #[test]
+    fn scale_of_zero_input_is_one() {
+        assert_eq!(scale(&[0.0, -0.0]), 1.0);
+        assert_eq!(scale(&[0.5, -3.0]), 2.0);
+    }
+
     #[test]
     fn rejects_impossible_byte_capacity_without_allocating() {
         assert_eq!(
