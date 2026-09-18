@@ -14,12 +14,11 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
     let mut previous = 0.0;
     let mut current = 1.0;
     for lower in 0..degree {
+        // Degrees above zero need at least two samples, so the division is
+        // finite; the first step's factor is zero.
         let k = lower as f64;
-        let factor = if lower == 0 {
-            0.0
-        } else {
-            k * k * (count * count - k * k) / ((4.0 * k * k - 1.0) * (count - 1.0) * (count - 1.0))
-        };
+        let factor =
+            k * k * (count * count - k * k) / ((4.0 * k * k - 1.0) * (count - 1.0) * (count - 1.0));
         let next = coordinate * current - factor * previous;
         previous = current;
         current = next;
@@ -120,7 +119,8 @@ impl Detrend {
         for (out, x) in output.iter_mut().zip(input) {
             *out = shift.apply(*x);
         }
-        // A single sample has no position to scale; its residual is zero.
+        // A single sample only allows order 0, which ignores the coordinate;
+        // this keeps it finite instead of dividing zero by zero.
         let coordinate = |i: usize| {
             if input.len() == 1 {
                 0.0
@@ -130,21 +130,20 @@ impl Detrend {
         };
         for degree in 0..=self.polynomial_order {
             let basis = |i: usize| gram(degree, coordinate(i), count);
-            let square = polynomial::sum((0..input.len()).map(|i| basis(i) * basis(i)));
-            // Gram polynomials shrink geometrically with their degree while the
-            // recurrence rounds at the magnitude of its first terms, so beyond
-            // roughly 50 degrees their values are noise. The scale-dependent
-            // threshold of `polynomial::kernels`, with `sqrt(count)` the norm of
-            // the constant basis polynomial, rejects such degrees.
+            let square = polynomial::sum((0..input.len()).map(basis).map(|b| b * b));
+            // Gram polynomials shrink geometrically with their degree. The
+            // threshold has the same form as the one in `polynomial::kernels`,
+            // with `sqrt(count)` the norm of the constant basis polynomial, and
+            // stops the fit once a degree has shrunk to rounding level.
             let norm = square.sqrt();
             if !norm.is_finite() || norm <= f64::EPSILON * count * count.sqrt() {
                 return Err(Error::NumericalFailure);
             }
+            // Projecting the running residual rather than the input keeps
+            // rounding in the basis from accumulating across degrees.
             let projection =
                 polynomial::sum(output.iter().enumerate().map(|(i, y)| y * basis(i))) / square;
             for (i, out) in output.iter_mut().enumerate() {
-                // Projecting onto the running residual keeps rounding in the
-                // basis from accumulating across degrees.
                 *out -= projection * basis(i);
             }
         }
