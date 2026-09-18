@@ -61,15 +61,8 @@ impl StandardNormalVariate {
 
 /// Assumes `validate` already accepted these slices.
 fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-    // Scaled samples lie in (-2, 2) and their offsets in (-4, 4), so deviations
-    // and their squares stay finite near f64::MAX and representable for
-    // subnormal spectra.
-    let scale = polynomial::scale(input);
-    // Samples within a factor of two of the reference differ exactly (Sterbenz
-    // lemma). The mean of these offsets stays representable when the mean of a
-    // large offset with small variation would round away the variation.
-    let reference = input[0] / scale;
-    let shifted = |x: &f64| x / scale - reference;
+    let shift = polynomial::Shift::new(input);
+    let shifted = |x: &f64| shift.apply(*x);
     let count = input.len() as f64;
     let mean = polynomial::sum(input.iter().map(shifted)) / count;
     // Two passes instead of mean(y²) - mean(y)², which cancels most digits

@@ -78,14 +78,37 @@ pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Resu
     Ok(())
 }
 
-/// Power-of-two scale that keeps `input` and differences of its samples within
-/// a small, exactly representable range. Returns `1.0` for an all-zero input.
-pub(crate) fn scale(input: &[f64]) -> f64 {
-    let magnitude = input.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
-    if magnitude == 0.0 {
-        1.0
-    } else {
-        power_of_two_floor(magnitude)
+/// Divides samples by a power of two near their largest magnitude and
+/// subtracts the scaled first sample.
+///
+/// Scaled samples lie in (-2, 2) and their offsets in (-4, 4), so sums and
+/// squares stay finite near `f64::MAX` and representable for subnormal
+/// spectra. Samples within a factor of two of the first one differ exactly
+/// (Sterbenz lemma), so a large offset cannot round away a small variation.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Shift {
+    /// Divisor applied to every sample; `1.0` for an all-zero input.
+    pub(crate) scale: f64,
+    reference: f64,
+}
+
+impl Shift {
+    /// Assumes `input` is nonempty and finite.
+    pub(crate) fn new(input: &[f64]) -> Self {
+        let magnitude = input.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
+        let scale = if magnitude == 0.0 {
+            1.0
+        } else {
+            power_of_two_floor(magnitude)
+        };
+        Self {
+            scale,
+            reference: input[0] / scale,
+        }
+    }
+
+    pub(crate) fn apply(self, x: f64) -> f64 {
+        x / self.scale - self.reference
     }
 }
 
@@ -230,9 +253,12 @@ mod tests {
     }
 
     #[test]
-    fn scale_of_zero_input_is_one() {
-        assert_eq!(scale(&[0.0, -0.0]), 1.0);
-        assert_eq!(scale(&[0.5, -3.0]), 2.0);
+    fn shift_scales_by_a_power_of_two_and_subtracts_the_first_sample() {
+        assert_eq!(Shift::new(&[0.0, -0.0]).scale, 1.0);
+        let shift = Shift::new(&[0.5, -3.0]);
+        assert_eq!(shift.scale, 2.0);
+        assert_eq!(shift.apply(0.5), 0.0);
+        assert_eq!(shift.apply(-3.0), -1.75);
     }
 
     #[test]

@@ -114,14 +114,11 @@ impl Detrend {
     /// Assumes `validate` already accepted these slices.
     fn correct(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         let count = input.len() as f64;
-        // Subtracting a sample keeps the variation of a spectrum with a large
-        // offset; the fit removes constants anyway, so the result is unchanged.
-        // Samples within a factor of two of the reference differ exactly
-        // (Sterbenz lemma).
-        let scale = polynomial::scale(input);
-        let reference = input[0] / scale;
+        // The fit removes constants, so subtracting the shift's reference
+        // sample leaves the result unchanged.
+        let shift = polynomial::Shift::new(input);
         for (out, x) in output.iter_mut().zip(input) {
-            *out = x / scale - reference;
+            *out = shift.apply(*x);
         }
         // A single sample has no position to scale; its residual is zero.
         let coordinate = |i: usize| {
@@ -152,7 +149,7 @@ impl Detrend {
             }
         }
         for out in output.iter_mut() {
-            *out *= scale;
+            *out *= shift.scale;
             if !out.is_finite() {
                 return Err(Error::NumericalFailure);
             }
