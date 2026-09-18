@@ -83,10 +83,8 @@ fn removes_polynomials_up_to_the_fitted_order() {
         for length in [order + 1, order + 2, 11, 251] {
             for degree in 0..=order {
                 let mut coefficients = vec![0.0; degree + 1];
+                coefficients[0] = -0.75;
                 coefficients[degree] = 1.5;
-                if degree > 0 {
-                    coefficients[0] = -0.75;
-                }
                 let input = polynomial(&coefficients, length);
                 let result = detrend(order, &input);
                 let context = format!(" (order {order}, length {length}, degree {degree})");
@@ -107,18 +105,16 @@ fn fitting_order_plus_one_samples_gives_zeros() {
 #[test]
 fn adding_a_fitted_polynomial_does_not_change_the_result() {
     let input = wavy(101);
+    let baselines: [&[f64]; 4] = [
+        &[5.0],
+        &[-2.0, 0.5],
+        &[0.0, 0.0, 3.0],
+        &[1.0, -1.0, 2.0, -0.5],
+    ];
     for order in 0..=3 {
         let expected = detrend(order, &input);
-        for coefficients in [
-            vec![5.0],
-            vec![-2.0, 0.5],
-            vec![0.0, 0.0, 3.0],
-            vec![1.0, -1.0, 2.0, -0.5],
-        ] {
-            if coefficients.len() > order + 1 {
-                continue;
-            }
-            let baseline = polynomial(&coefficients, input.len());
+        for coefficients in baselines.iter().filter(|c| c.len() <= order + 1) {
+            let baseline = polynomial(coefficients, input.len());
             let measured: Vec<_> = input.iter().zip(&baseline).map(|(x, b)| x + b).collect();
             close_with(
                 &detrend(order, &measured),
@@ -180,8 +176,12 @@ fn removes_baselines_from_nir_like_spectra() {
         );
     }
     // The bands survive: the correction is a smooth baseline, not a filter.
-    let difference: Vec<_> = bands.iter().zip(&expected).map(|(x, y)| x - y).collect();
-    assert!(largest(&difference) < 0.3, "{}", largest(&difference));
+    let change = bands
+        .iter()
+        .zip(&expected)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0_f64, f64::max);
+    assert!(change < 0.3, "{change}");
     // The O–H band at 1450 nm still stands above the corrected spectrum.
     assert!(expected[175] > 0.2, "{}", expected[175]);
 }
@@ -199,14 +199,15 @@ fn snv_and_detrend_pipeline() {
     // shapes the pipeline is meant to preserve.
     let pipeline = |spectrum: &[f64]| {
         let normalized = StandardNormalVariate.apply(spectrum).unwrap();
-        let corrected = Detrend::new(2).apply(&normalized).unwrap();
-        StandardNormalVariate.apply(&corrected).unwrap()
+        StandardNormalVariate
+            .apply(&detrend(2, &normalized))
+            .unwrap()
     };
     close(&pipeline(&sloped), &pipeline(&bands));
 
     // Smoothing first is the usual order and keeps the pipeline finite.
     let smoothed = SavitzkyGolay::new(11, 2).unwrap().apply(&sloped).unwrap();
-    let result = Detrend::new(2).apply(&smoothed).unwrap();
+    let result = detrend(2, &smoothed);
     assert!(result.iter().all(|x| x.is_finite()));
     assert!(largest(&result) > 0.1);
 }
@@ -287,8 +288,8 @@ fn validation_and_buffer_preservation() {
 fn extreme_values_stay_finite_or_fail() {
     let tiny = f64::from_bits(1);
     for value in [f64::MAX, -f64::MAX, f64::MIN_POSITIVE, tiny] {
+        let input: Vec<_> = (0..11).map(|i| value / (i + 1) as f64).collect();
         for order in 0..=2 {
-            let input: Vec<_> = (0..11).map(|i| value / (i + 1) as f64).collect();
             match Detrend::new(order).apply(&input) {
                 Ok(result) => assert!(result.iter().all(|x| x.is_finite())),
                 Err(error) => assert_eq!(error, Error::NumericalFailure),
@@ -297,7 +298,7 @@ fn extreme_values_stay_finite_or_fail() {
     }
     // A constant spectrum has no trend to remove, at any magnitude.
     for value in [0.0, -0.0, 7.5, f64::MAX, tiny] {
-        close(&detrend(2, &vec![value; 33]), &vec![0.0; 33]);
+        close(&detrend(2, &[value; 33]), &[0.0; 33]);
     }
     // A large offset must not swamp the variation the input still represents.
     // Subtracting the offset is exact here (Sterbenz lemma), so the shifted
@@ -314,7 +315,7 @@ fn excessive_order_is_rejected() {
     // limit without pinning it: a high but usable order still fits.
     for length in [101, 1001] {
         let input = wavy(length);
-        let usable = Detrend::new(20).apply(&input).unwrap();
+        let usable = detrend(20, &input);
         assert!(usable.iter().all(|x| x.is_finite()), "length {length}");
         assert_eq!(
             Detrend::new(60).apply(&input),
@@ -335,13 +336,12 @@ fn excessive_order_is_rejected() {
 #[test]
 fn numpy_reference() {
     let fixture = include_str!("fixtures/scipy_detrend.txt");
+    let values =
+        |text: &str| -> Vec<f64> { text.split(',').map(|v| v.parse::<f64>().unwrap()).collect() };
     let mut cases = 0;
     for line in fixture.lines().filter(|line| !line.starts_with('#')) {
         let mut parts = line.split('|');
         let order: usize = parts.next().unwrap().parse().unwrap();
-        let values = |text: &str| -> Vec<f64> {
-            text.split(',').map(|v| v.parse::<f64>().unwrap()).collect()
-        };
         let input = values(parts.next().unwrap());
         let expected = values(parts.next().unwrap());
         assert!(parts.next().is_none());
