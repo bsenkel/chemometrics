@@ -1,5 +1,5 @@
-// Private least-squares and sample-scaling machinery; intentionally not a
-// general matrix API.
+// Private numerical helpers shared by the public modules: least squares, sample
+// scaling, validation and buffers; intentionally not a general matrix API.
 use crate::Error;
 
 fn check_capacity<T>(length: usize) -> Result<(), Error> {
@@ -53,6 +53,29 @@ fn power_of_two_floor(magnitude: f64) -> f64 {
     } else {
         f64::from_bits(exponent)
     }
+}
+
+/// Checks a spectrum and its output buffer for the per-spectrum transforms.
+///
+/// Reports too few samples, a buffer of different length and non-finite input,
+/// in that order, before anything is written.
+pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Result<(), Error> {
+    if input.len() < minimum {
+        return Err(Error::TooFewSamples {
+            length: input.len(),
+            minimum,
+        });
+    }
+    if output_len != input.len() {
+        return Err(Error::OutputLengthMismatch {
+            expected: input.len(),
+            actual: output_len,
+        });
+    }
+    if let Some(index) = input.iter().position(|x| !x.is_finite()) {
+        return Err(Error::NonFiniteInput { index });
+    }
+    Ok(())
 }
 
 /// Power-of-two scale that keeps `input` and differences of its samples within

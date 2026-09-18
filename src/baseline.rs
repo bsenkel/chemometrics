@@ -4,25 +4,6 @@
 //! Output length and sample order are preserved.
 use crate::{Error, polynomial};
 
-fn validate(input: &[f64], output_len: usize, minimum: usize) -> Result<(), Error> {
-    if input.len() < minimum {
-        return Err(Error::TooFewSamples {
-            length: input.len(),
-            minimum,
-        });
-    }
-    if output_len != input.len() {
-        return Err(Error::OutputLengthMismatch {
-            expected: input.len(),
-            actual: output_len,
-        });
-    }
-    if let Some(index) = input.iter().position(|x| !x.is_finite()) {
-        return Err(Error::NonFiniteInput { index });
-    }
-    Ok(())
-}
-
 /// Value of the monic Gram polynomial of degree `degree` at `coordinate`.
 ///
 /// Gram polynomials are orthogonal on the uniform grid `2 i / (n - 1) - 1`,
@@ -104,7 +85,7 @@ impl Detrend {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        validate(input, input.len(), self.minimum_length())?;
+        polynomial::validate(input, input.len(), self.minimum_length())?;
         let mut output = polynomial::zeros(input.len())?;
         self.correct(input, &mut output)?;
         Ok(output)
@@ -122,7 +103,7 @@ impl Detrend {
     /// Returns [`Error::NumericalFailure`] if the basis is numerically rank
     /// deficient or a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        validate(input, output.len(), self.minimum_length())?;
+        polynomial::validate(input, output.len(), self.minimum_length())?;
         self.correct(input, output)
     }
 

@@ -4,25 +4,6 @@
 //! or to an x-axis. Output length and sample order are preserved.
 use crate::{Error, polynomial};
 
-fn validate(input: &[f64], output_len: usize) -> Result<(), Error> {
-    if input.len() < 2 {
-        return Err(Error::TooFewSamples {
-            length: input.len(),
-            minimum: 2,
-        });
-    }
-    if output_len != input.len() {
-        return Err(Error::OutputLengthMismatch {
-            expected: input.len(),
-            actual: output_len,
-        });
-    }
-    if let Some(index) = input.iter().position(|x| !x.is_finite()) {
-        return Err(Error::NonFiniteInput { index });
-    }
-    Ok(())
-}
-
 /// Standard normal variate (SNV): centers each spectrum on its mean and divides
 /// it by its sample standard deviation.
 ///
@@ -56,7 +37,7 @@ impl StandardNormalVariate {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        validate(input, input.len())?;
+        polynomial::validate(input, input.len(), 2)?;
         let mut output = polynomial::zeros(input.len())?;
         normalize(input, &mut output)?;
         Ok(output)
@@ -73,7 +54,7 @@ impl StandardNormalVariate {
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
     /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        validate(input, output.len())?;
+        polynomial::validate(input, output.len(), 2)?;
         normalize(input, output)
     }
 }
