@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, per-spectrum normalization in `src/normalize.rs`, baseline correction in `src/baseline.rs`, shared errors in `src/error.rs`, and private Householder-QR and coefficient calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters, `tests/derivatives.rs` for Savitzky–Golay derivatives, `tests/normalization.rs` for SNV and `tests/baseline.rs` for detrending; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters, derivatives, SNV and detrending. GitHub Actions configuration is in `.github/workflows/ci.yml`.
+`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, per-spectrum normalization in `src/normalize.rs`, baseline correction in `src/baseline.rs`, shared errors in `src/error.rs`, and private Householder-QR, coefficient and sample-scaling calculations in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters, `tests/derivatives.rs` for Savitzky–Golay derivatives, `tests/normalization.rs` for SNV and `tests/baseline.rs` for detrending; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters, derivatives, SNV and detrending. GitHub Actions configuration is in `.github/workflows/ci.yml`.
 
 ## Build, Test, and Development Commands
 

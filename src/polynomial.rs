@@ -1,4 +1,5 @@
-// Private least-squares machinery; intentionally not a general matrix API.
+// Private least-squares and sample-scaling machinery; intentionally not a
+// general matrix API.
 use crate::Error;
 
 fn check_capacity<T>(length: usize) -> Result<(), Error> {
