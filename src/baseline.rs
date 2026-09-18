@@ -84,7 +84,7 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
 /// }
 /// # Ok::<(), chemometrics::Error>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Detrend {
     polynomial_order: usize,
 }
