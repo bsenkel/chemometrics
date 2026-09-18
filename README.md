@@ -71,9 +71,10 @@ SNV centers each spectrum on its mean and divides it by its sample standard
 deviation, with divisor `n - 1` as in R's `sd` and
 `scipy.stats.zscore(x, ddof=1)`. Tools dividing by `n` return values larger by
 `sqrt(n / (n - 1))`. Multiplicative scaling and constant offsets cancel; a
-sloping baseline does not, which is what detrending below is for. A constant spectrum yields zeros, and at least two
-samples are required (`Error::TooFewSamples`). SNV needs no x-axis, holds no
-parameters and takes O(n) time.
+sloping baseline does not, which is what detrending below is for. A constant
+spectrum yields zeros, and at least two samples are required
+(`Error::TooFewSamples`). SNV needs no x-axis, holds no parameters and takes
+O(n) time.
 
 ## Detrend
 
@@ -101,11 +102,11 @@ spectrum leaves the result unchanged. Strong bands pull the fit towards
 themselves and are damped along with the baseline; low orders limit this, and
 orders above roughly 3 fit band structure rather than a baseline. Orders of a
 few dozen degrees fail with `Error::NumericalFailure`, a limit that falls as a
-spectrum grows longer. A spectrum needs at least
-`order + 1` samples (`Error::TooFewSamples`); with exactly that many the fit
-passes through every sample and the result is zeros. Savitzky–Golay derivatives
-are the alternative that needs no fit at all: the first removes offsets and the
-second also removes slopes.
+spectrum grows longer. A spectrum needs at least `order + 1` samples
+(`Error::TooFewSamples`); with exactly that many the fit passes through every
+sample and the result is zeros. Savitzky–Golay derivatives are the alternative
+that needs no fit at all: the first removes offsets and the second also removes
+slopes.
 
 Detrending holds only its order, so one value corrects spectra of any length.
 `apply_into` writes into a caller-owned buffer without allocating. Both take
