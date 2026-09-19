@@ -19,7 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --locked --all-targets
       - run: cargo test --locked --doc
-      - run: cargo run --locked --example smoothing
+      - run: cargo run --locked --example preprocessing
   quality:
     runs-on: ubuntu-latest
     steps:

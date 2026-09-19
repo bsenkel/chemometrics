@@ -36,7 +36,7 @@ fn main() -> Result<(), chemometrics::Error> {
 vectors; the Savitzky–Golay filter does not process `average`. Reuse `filter`
 and `buffer` when processing additional spectra of the same length.
 
-Run `cargo run --example smoothing` for an executable example.
+Run `cargo run --example preprocessing` for an executable example.
 
 ## Savitzky–Golay derivatives
 

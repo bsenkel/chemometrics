@@ -2,12 +2,12 @@
 
 ## Project Structure & Module Organization
 
-`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, per-spectrum normalization in `src/normalize.rs`, baseline correction in `src/baseline.rs`, shared errors in `src/error.rs`, and private Householder-QR, coefficient, sample-scaling and input-validation helpers in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters, `tests/derivatives.rs` for Savitzky–Golay derivatives, `tests/normalization.rs` for SNV and `tests/baseline.rs` for detrending; SciPy reference data and its generators live in `tests/fixtures/`. `examples/smoothing.rs` demonstrates both filters, derivatives, SNV and detrending. GitHub Actions configuration is in `.github/workflows/ci.yml`.
+`src/lib.rs` exposes the library API. Public filters live in `src/smooth.rs`, per-spectrum normalization in `src/normalize.rs`, baseline correction in `src/baseline.rs`, shared errors in `src/error.rs`, and private Householder-QR, coefficient, sample-scaling and input-validation helpers in `src/polynomial.rs`. Integration tests live in `tests/smoothing.rs` for the filters, `tests/derivatives.rs` for Savitzky–Golay derivatives, `tests/normalization.rs` for SNV and `tests/baseline.rs` for detrending; SciPy reference data and its generators live in `tests/fixtures/`. `examples/preprocessing.rs` demonstrates both filters, derivatives, SNV and detrending. GitHub Actions configuration is in `.github/workflows/ci.yml`.
 
 ## Build, Test, and Development Commands
 
 - `cargo build --locked`: compile the library.
-- `cargo run --locked --example smoothing`: run the filter example.
+- `cargo run --locked --example preprocessing`: run the preprocessing example.
 - `cargo test --locked --all-targets`: run unit and integration tests and compile examples.
 - `cargo test --locked --doc`: test documentation examples, including the README.
 - `cargo +1.85 test --locked --all-targets`: check the minimum supported Rust version when that toolchain is installed.
