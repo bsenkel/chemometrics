@@ -2,7 +2,7 @@
 //!
 //! Each spectrum is transformed on its own, without reference to other spectra
 //! or to an x-axis. Output length and sample order are preserved.
-use crate::{Error, polynomial};
+use crate::{Error, numeric};
 
 /// Standard normal variate (SNV): centers each spectrum on its mean and divides
 /// it by its sample standard deviation.
@@ -37,8 +37,8 @@ impl StandardNormalVariate {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        polynomial::validate(input, input.len(), 2)?;
-        let mut output = polynomial::zeros(input.len())?;
+        numeric::validate(input, input.len(), 2)?;
+        let mut output = numeric::zeros(input.len())?;
         normalize(input, &mut output)?;
         Ok(output)
     }
@@ -54,20 +54,20 @@ impl StandardNormalVariate {
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
     /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        polynomial::validate(input, output.len(), 2)?;
+        numeric::validate(input, output.len(), 2)?;
         normalize(input, output)
     }
 }
 
 /// Assumes `validate` already accepted these slices.
 fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-    let shift = polynomial::Shift::new(input);
+    let shift = numeric::Shift::new(input);
     let shifted = |x: &f64| shift.apply(*x);
     let count = input.len() as f64;
-    let mean = polynomial::sum(input.iter().map(shifted)) / count;
+    let mean = numeric::sum(input.iter().map(shifted)) / count;
     // Two passes instead of mean(y²) - mean(y)², which cancels most digits
     // for spectra with a large offset and small variation.
-    let variance = polynomial::sum(input.iter().map(|x| {
+    let variance = numeric::sum(input.iter().map(|x| {
         let deviation = shifted(x) - mean;
         deviation * deviation
     })) / (count - 1.0);

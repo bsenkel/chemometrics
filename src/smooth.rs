@@ -3,7 +3,7 @@
 //! Windows have positive odd lengths measured in samples. At either edge,
 //! the nearest complete window is used without padding or invented samples.
 //! An ascending or descending uniform x-axis is equally valid.
-use crate::{Error, polynomial};
+use crate::{Error, numeric};
 
 fn window_valid(window: usize) -> Result<(), Error> {
     if window == 0 || window % 2 == 0 {
@@ -88,7 +88,7 @@ impl MovingAverage {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
         validate(input, input.len(), self.window_length)?;
-        let mut output = polynomial::zeros(input.len())?;
+        let mut output = numeric::zeros(input.len())?;
         self.filter(input, &mut output)?;
         Ok(output)
     }
@@ -111,8 +111,7 @@ impl MovingAverage {
             // Normalize before summation, including for values near f64::MAX.
             // The exact normalized mean is in [-1, 1]; clamp rounding drift
             // before rescaling so a finite constant cannot overflow.
-            let normalized =
-                polynomial::sum(samples.iter().map(|x| x / scale)) / samples.len() as f64;
+            let normalized = numeric::sum(samples.iter().map(|x| x / scale)) / samples.len() as f64;
             normalized.clamp(-1.0, 1.0) * scale
         })
     }
@@ -210,7 +209,7 @@ impl SavitzkyGolay {
         }
         Ok(Self {
             window_length,
-            kernels: polynomial::kernels(
+            kernels: numeric::kernels(
                 window_length,
                 polynomial_order,
                 derivative_order,
@@ -224,7 +223,7 @@ impl SavitzkyGolay {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
         validate(input, input.len(), self.window_length)?;
-        let mut output = polynomial::zeros(input.len())?;
+        let mut output = numeric::zeros(input.len())?;
         self.filter(input, &mut output)?;
         Ok(output)
     }
@@ -242,7 +241,7 @@ impl SavitzkyGolay {
         map_windows(input, output, self.window_length, |offset, samples| {
             let row = offset * self.window_length;
             let weights = &self.kernels[row..row + self.window_length];
-            polynomial::sum(weights.iter().zip(samples).map(|(a, b)| a * b))
+            numeric::sum(weights.iter().zip(samples).map(|(a, b)| a * b))
         })
     }
 }

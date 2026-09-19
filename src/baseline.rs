@@ -2,7 +2,7 @@
 //!
 //! Each spectrum is corrected on its own, without reference to other spectra.
 //! Output length and sample order are preserved.
-use crate::{Error, polynomial};
+use crate::{Error, numeric};
 
 /// Value of the monic Gram polynomial of degree `degree` at `coordinate`.
 ///
@@ -84,8 +84,8 @@ impl Detrend {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        polynomial::validate(input, input.len(), self.minimum_length())?;
-        let mut output = polynomial::zeros(input.len())?;
+        numeric::validate(input, input.len(), self.minimum_length())?;
+        let mut output = numeric::zeros(input.len())?;
         self.correct(input, &mut output)?;
         Ok(output)
     }
@@ -102,7 +102,7 @@ impl Detrend {
     /// Returns [`Error::NumericalFailure`] if the basis is numerically rank
     /// deficient or a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        polynomial::validate(input, output.len(), self.minimum_length())?;
+        numeric::validate(input, output.len(), self.minimum_length())?;
         self.correct(input, output)
     }
 
@@ -115,7 +115,7 @@ impl Detrend {
         let count = input.len() as f64;
         // The fit removes constants, so subtracting the shift's reference
         // sample leaves the result unchanged.
-        let shift = polynomial::Shift::new(input);
+        let shift = numeric::Shift::new(input);
         for (out, x) in output.iter_mut().zip(input) {
             *out = shift.apply(*x);
         }
@@ -130,9 +130,9 @@ impl Detrend {
         };
         for degree in 0..=self.polynomial_order {
             let basis = |i: usize| gram(degree, coordinate(i), count);
-            let square = polynomial::sum((0..input.len()).map(basis).map(|b| b * b));
+            let square = numeric::sum((0..input.len()).map(basis).map(|b| b * b));
             // Gram polynomials shrink geometrically with their degree. The
-            // threshold has the same form as the one in `polynomial::kernels`,
+            // threshold has the same form as the one in `numeric::kernels`,
             // with `sqrt(count)` the norm of the constant basis polynomial, and
             // stops the fit once a degree has shrunk to rounding level.
             let norm = square.sqrt();
@@ -142,7 +142,7 @@ impl Detrend {
             // Projecting the running residual rather than the input keeps
             // rounding in the basis from accumulating across degrees.
             let projection =
-                polynomial::sum(output.iter().enumerate().map(|(i, y)| y * basis(i))) / square;
+                numeric::sum(output.iter().enumerate().map(|(i, y)| y * basis(i))) / square;
             for (i, out) in output.iter_mut().enumerate() {
                 *out -= projection * basis(i);
             }

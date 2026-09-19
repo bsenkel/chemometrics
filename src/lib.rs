@@ -11,7 +11,7 @@
 pub mod baseline;
 mod error;
 pub mod normalize;
-mod polynomial;
+mod numeric;
 pub mod smooth;
 pub use error::Error;
 
