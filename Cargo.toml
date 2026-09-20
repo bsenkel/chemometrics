@@ -9,7 +9,7 @@ readme = "README.md"
 repository = "https://github.com/bsenkel/chemometrics"
 keywords = ["chemometrics", "spectroscopy", "spectral-analysis", "signal-processing", "preprocessing"]
 categories = ["science", "mathematics"]
-exclude = [".github/", "AGENTS.md"]
+exclude = [".github/", "AGENTS.md", "deny.toml"]
 
 [features]
 pca = ["dep:faer"]

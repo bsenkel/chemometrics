@@ -1,0 +1,19 @@
+# Dependency policy for the optional `pca` feature; the default build has no
+# dependencies. Run with `cargo deny --all-features check`.
+[advisories]
+ignore = [
+    # paste is unmaintained but has no known vulnerability; it is a build-time
+    # macro helper pulled in through faer.
+    "RUSTSEC-2024-0436",
+]
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
