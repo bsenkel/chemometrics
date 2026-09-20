@@ -20,6 +20,10 @@ faer = { version = "0.24", default-features = false, features = [
     "linalg",
 ], optional = true }
 
+[[example]]
+name = "pca"
+required-features = ["pca"]
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
