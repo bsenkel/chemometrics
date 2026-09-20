@@ -11,7 +11,18 @@ keywords = ["chemometrics", "spectroscopy", "spectral-analysis", "signal-process
 categories = ["science", "mathematics"]
 exclude = [".github/", "AGENTS.md"]
 
+[features]
+pca = ["dep:faer"]
+
 [dependencies]
+faer = { version = "0.24", default-features = false, features = [
+    "std",
+    "linalg",
+], optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [lints.rust]
 unsafe_code = "forbid"
