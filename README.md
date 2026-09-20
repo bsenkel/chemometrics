@@ -7,7 +7,8 @@
 Spectral preprocessing in Rust, dependency-free by default. Provides moving
 average smoothing and Savitzky–Golay smoothing and numerical derivatives for
 uniformly sampled `f64` signals, standard normal variate (SNV) normalization
-and polynomial detrending of spectra.
+and polynomial detrending of spectra. The optional `pca` feature adds
+principal component analysis with outlier statistics.
 
 ```rust
 use chemometrics::smooth::{MovingAverage, SavitzkyGolay};
@@ -36,7 +37,8 @@ fn main() -> Result<(), chemometrics::Error> {
 vectors; the Savitzky–Golay filter does not process `average`. Reuse `filter`
 and `buffer` when processing additional spectra of the same length.
 
-Run `cargo run --example preprocessing` for an executable example.
+Run `cargo run --example preprocessing` for an executable example, and
+`cargo run --features pca --example pca` for the principal component one.
 
 ## Savitzky–Golay derivatives
 
@@ -113,6 +115,79 @@ Detrending holds only its order, so one value corrects spectra of any length.
 O(n × order²) time and no working memory beyond the output, using Gram
 polynomials evaluated from their recurrence.
 
+## Principal component analysis
+
+Principal components are behind the optional `pca` feature, because they need a
+matrix decomposition and therefore a dependency:
+
+```toml
+[dependencies]
+chemometrics = { version = "0.1", features = ["pca"] }
+```
+
+```rust,ignore
+use chemometrics::pca::Pca;
+
+// Four spectra of three wavelengths each, row-major.
+let data = [
+    1.0, 2.0, 3.0, //
+    2.0, 4.1, 6.0, //
+    3.0, 5.9, 9.0, //
+    4.0, 8.0, 12.0,
+];
+let model = Pca::fit(&data, 3, 2)?;
+println!("explained: {:?}", model.explained_variance_ratio());
+
+let projection = model.project(&[2.0, 4.0, 6.0])?;
+let diagnostics = projection.diagnostics;
+println!("T² {}, Q {}", diagnostics.hotelling_t2, diagnostics.q_residual);
+```
+
+This block is not compiled with the README's other examples, which run without
+the feature; the module documentation carries the tested version.
+
+
+A set of spectra is one flat row-major slice plus the number of variables per
+sample, which is the layout of a NumPy array or an `ndarray` row-major view, so
+no matrix type appears in the API. `Pca::fit` mean-centers the data and keeps
+the requested number of components, at most `min(samples - 1, variables)`.
+Individual variables are never scaled: spectral variables share one unit, and
+autoscaling would amplify noise-only wavelengths.
+
+`Pca::project` places a further spectrum in the model and returns its scores
+together with Hotelling's T², the squared distance inside the component plane,
+and the Q residual, the squared distance to it. Both statistics are needed: T²
+finds a spectrum that is extreme in directions the model knows, Q finds one that
+carries variation the model does not describe, such as an unexpected band.
+`project_into` writes the scores into a caller-owned buffer without allocating.
+Control limits are not computed; their formulas are documented on the
+`Diagnostics` fields.
+
+Eigenvalues are score variances with divisor `samples - 1`, and
+`explained_variance_ratio` divides them by the total variance of the centered
+data, so the shares sum to one exactly when every component is kept. The sign of
+a component is fixed by making its largest-magnitude loading positive, which
+keeps results reproducible. Components whose eigenvalues are nearly equal are
+not determined by the data. A requested component that is numerically
+indistinguishable from zero gives `Error::NumericalFailure`.
+
+Fitting takes O(samples × variables × min(samples, variables)) time, holds one
+centered copy of the data besides the factors of the decomposition, and runs on
+a single thread. The copy is scaled by a power of two, so spectra of extreme
+magnitude stay stable; magnitudes whose variances no longer fit into an `f64`
+are rejected. Results are not bit-identical across CPU architectures, since the
+decomposition uses SIMD, and allocations inside it abort on failure instead of
+reporting `Error::AllocationFailure` as this crate's own buffers do.
+
+The feature costs about 50 additional crates through
+[`faer`](https://crates.io/crates/faer), a pure-Rust linear algebra library that
+needs no BLAS or LAPACK. `faer` is an internal implementation detail and does
+not appear in this crate's API. `unsafe_code = "forbid"` applies to this crate
+only; `faer` uses `unsafe` for SIMD. The default build remains dependency-free.
+Cargo has no per-feature `rust-version`: the feature is tested on 1.85 with this
+repository's `Cargo.lock`, but a fresh resolution may pick dependency versions
+that require a newer toolchain.
+
 ## Signal and edge conventions
 
 Window lengths are positive odd numbers of samples. The input must contain
@@ -150,21 +225,21 @@ Planned areas of development, without a fixed release schedule or ordering:
 - Further spectral normalization (vector, area, min–max)
 - Further baseline correction (asymmetric least squares, rubberband)
 - Peak detection
-- PCA and PLS through optional features
+- PLS regression, autoscaling and control limits for T² and Q, extending the
+  `pca` feature
 
-The default functionality will remain dependency-free. These capabilities are
-not implemented yet.
+The default functionality will remain dependency-free. Apart from principal
+component analysis, these capabilities are not implemented yet.
 
 ## Extension boundaries
 
 The public API uses slices and has no dependency on a file format. Applications
 can pass intensities read by `spc-spectra` directly to these filters.
 
-Additional preprocessing can add slice-based modules. Matrix dependencies will
-be optional, preserving the smoothing API.
-No placeholder APIs or feature flags are published yet. f32, no_std, irregular
-sampling, alternate edge modes, in-place filtering and parallel processing are
-outside version 0.1.
+Additional preprocessing can add slice-based modules. Matrix dependencies stay
+optional and internal, as `pca` shows, so the preprocessing API is unaffected by
+them. f32, no_std, irregular sampling, alternate edge modes, in-place filtering
+and parallel processing are outside version 0.1.
 
 ## Numerical validation
 
@@ -206,3 +281,14 @@ curved baselines. Regenerate with `uv run tests/fixtures/generate_baseline.py`.
 Analytic tests also verify exact removal of polynomials up to the fitted order,
 orthogonality of the residual, invariance, idempotence, axis reversal and
 extreme values.
+
+PCA references in `tests/fixtures/numpy_pca.txt` come from `numpy.linalg.svd` of
+the centered data and are cross-checked inside the generator against
+scikit-learn 1.9.1's `PCA(svd_solver="full")`. Cases cover square, tall and wide
+data, a fully determined case, large offsets and extreme magnitudes, and
+NIR-like mixtures after SNV, each with clearly separated eigenvalues, since
+loadings of nearly equal eigenvalues are not determined. Regenerate with
+`uv run tests/fixtures/generate_pca.py`. Analytic tests also verify orthonormal
+loadings, score variances, invariance under offsets, scaling and sample order,
+the sign convention, the mean of T² over the training set, and the separation of
+T² and Q outliers.
