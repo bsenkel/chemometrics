@@ -1,0 +1,573 @@
+//! Analytic, synthetic NIR and NumPy reference checks for principal components.
+#![cfg(feature = "pca")]
+use chemometrics::{Error, pca::Pca};
+use std::f64::consts::LN_2;
+
+fn largest(values: &[f64]) -> f64 {
+    values.iter().fold(0.0_f64, |a, b| a.max(b.abs()))
+}
+
+/// Compares with the usual tolerance plus a term for the data magnitude.
+///
+/// Centring a spectrum on a large offset loses absolute precision in
+/// proportion to that offset, in any implementation.
+fn close_with(actual: &[f64], expected: &[f64], magnitude: f64, context: impl std::fmt::Display) {
+    assert_eq!(actual.len(), expected.len(), "length{context}");
+    let floor = 1e-10 + 1e3 * f64::EPSILON * magnitude;
+    for (i, (&a, &b)) in actual.iter().zip(expected).enumerate() {
+        assert!(
+            a.is_finite() && b.is_finite() && (a - b).abs() <= floor + 1e-10 * b.abs(),
+            "value {i}{context}: {a} != {b}"
+        );
+    }
+}
+
+fn close(actual: &[f64], expected: &[f64]) {
+    close_with(actual, expected, largest(expected), "");
+}
+
+type Fields<'a> = std::str::Split<'a, char>;
+
+fn values(parts: &mut Fields<'_>) -> Vec<f64> {
+    parts
+        .next()
+        .unwrap()
+        .split(',')
+        .map(|v| v.parse::<f64>().unwrap())
+        .collect()
+}
+
+fn number(parts: &mut Fields<'_>) -> usize {
+    parts.next().unwrap().parse().unwrap()
+}
+
+/// Deterministic values in [-1, 1) from a linear congruential generator.
+fn pseudo_random(count: usize, seed: u64) -> Vec<f64> {
+    let mut state = seed | 1;
+    (0..count)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (state >> 11) as f64 / (1u64 << 52) as f64 - 1.0
+        })
+        .collect()
+}
+
+/// Absorbance of one Gaussian band, 1100–2500 nm at 14 nm.
+fn band(centre: f64, fwhm: f64) -> Vec<f64> {
+    (0..101)
+        .map(|i| {
+            let wavelength = 1100.0 + 14.0 * i as f64;
+            (-4.0 * LN_2 * ((wavelength - centre) / fwhm).powi(2)).exp()
+        })
+        .collect()
+}
+
+/// NIR-like mixtures: `samples` spectra of three bands with varying
+/// concentrations, multiplicative scatter and an offset.
+fn mixtures(samples: usize) -> Vec<f64> {
+    let profiles = [band(1210.0, 60.0), band(1450.0, 90.0), band(1940.0, 110.0)];
+    let draws = pseudo_random(samples * 5, 20260919);
+    let mut data = Vec::with_capacity(samples * 101);
+    for (i, draw) in draws.chunks_exact(5).enumerate() {
+        let scatter = 1.0 + 0.3 * draw[3];
+        let offset = 0.4 + 0.2 * draw[4];
+        for j in 0..101 {
+            let absorbance: f64 = profiles
+                .iter()
+                .zip(draw)
+                .map(|(profile, concentration)| (0.5 + 0.4 * concentration) * profile[j])
+                .sum();
+            data.push(scatter * absorbance + offset + 1e-5 * ((i * 101 + j) as f64).sin());
+        }
+    }
+    data
+}
+
+fn variance(values: impl Iterator<Item = f64> + Clone, count: usize) -> f64 {
+    let mean = values.clone().sum::<f64>() / count as f64;
+    values.map(|x| (x - mean).powi(2)).sum::<f64>() / (count - 1) as f64
+}
+
+#[test]
+fn loadings_are_orthonormal() {
+    let data = mixtures(12);
+    let model = Pca::fit(&data, 101, 3).unwrap();
+    for a in 0..model.components() {
+        for b in 0..model.components() {
+            let product: f64 = model
+                .loading(a)
+                .unwrap()
+                .iter()
+                .zip(model.loading(b).unwrap())
+                .map(|(p, q)| p * q)
+                .sum();
+            let expected = if a == b { 1.0 } else { 0.0 };
+            assert!((product - expected).abs() < 1e-12, "({a}, {b}): {product}");
+        }
+    }
+}
+
+#[test]
+fn scores_carry_the_component_variance() {
+    let data = mixtures(16);
+    let model = Pca::fit(&data, 101, 3).unwrap();
+    let column = |a: usize| model.scores().iter().skip(a).step_by(3).copied();
+    for a in 0..3 {
+        let mean: f64 = column(a).sum::<f64>() / 16.0;
+        assert!(mean.abs() < 1e-12, "component {a} mean {mean}");
+        let actual = variance(column(a), 16);
+        let expected = model.eigenvalues()[a];
+        assert!(
+            (actual - expected).abs() <= 1e-12 * expected,
+            "component {a}: {actual} != {expected}"
+        );
+        for b in (a + 1)..3 {
+            let covariance: f64 = column(a).zip(column(b)).map(|(s, t)| s * t).sum::<f64>() / 15.0;
+            assert!(
+                covariance.abs() < 1e-12 * expected,
+                "({a}, {b}) {covariance}"
+            );
+        }
+    }
+    // Eigenvalues are nonincreasing and sum to at most the total variance.
+    assert!(model.eigenvalues().windows(2).all(|w| w[0] >= w[1]));
+    assert!(model.eigenvalues().iter().sum::<f64>() <= model.total_variance() * (1.0 + 1e-12));
+}
+
+#[test]
+fn every_component_describes_the_data_completely() {
+    // Six samples of four variables: four components span the centred data.
+    let data = pseudo_random(24, 7);
+    let model = Pca::fit(&data, 4, 4).unwrap();
+    let ratios: f64 = model.explained_variance_ratio().iter().sum();
+    assert!((ratios - 1.0).abs() < 1e-12, "{ratios}");
+    for sample in data.chunks_exact(4) {
+        let projection = model.project(sample).unwrap();
+        assert!(
+            projection.diagnostics.q_residual < 1e-24,
+            "{:?}",
+            projection.diagnostics
+        );
+    }
+}
+
+#[test]
+fn training_projections_match_the_stored_scores() {
+    let data = mixtures(10);
+    let model = Pca::fit(&data, 101, 2).unwrap();
+    let mut total = 0.0;
+    for (i, sample) in data.chunks_exact(101).enumerate() {
+        let projection = model.project(sample).unwrap();
+        close(&projection.scores, model.score(i).unwrap());
+        total += projection.diagnostics.hotelling_t2;
+    }
+    // The mean of T² over the training samples is k (n − 1) / n.
+    let expected = 2.0 * 9.0 / 10.0;
+    let actual = total / 10.0;
+    assert!((actual - expected).abs() < 1e-9, "{actual} != {expected}");
+}
+
+#[test]
+fn model_is_invariant_under_offsets_and_scaling() {
+    let data = mixtures(8);
+    let model = Pca::fit(&data, 101, 2).unwrap();
+
+    // A constant per variable moves the mean only.
+    let shifted: Vec<f64> = data
+        .chunks_exact(101)
+        .flat_map(|row| row.iter().enumerate().map(|(j, x)| x + 0.1 * j as f64))
+        .collect();
+    let moved = Pca::fit(&shifted, 101, 2).unwrap();
+    close(moved.loadings(), model.loadings());
+    close(moved.scores(), model.scores());
+    close(moved.eigenvalues(), model.eigenvalues());
+    let expected: Vec<f64> = model
+        .mean()
+        .iter()
+        .enumerate()
+        .map(|(j, m)| m + 0.1 * j as f64)
+        .collect();
+    close(moved.mean(), &expected);
+
+    // Scaling by c keeps the loadings, scales scores by c and variances by c².
+    let factor = 1024.0;
+    let scaled: Vec<f64> = data.iter().map(|x| x * factor).collect();
+    let bigger = Pca::fit(&scaled, 101, 2).unwrap();
+    close(bigger.loadings(), model.loadings());
+    let scores: Vec<f64> = model.scores().iter().map(|t| t * factor).collect();
+    close(bigger.scores(), &scores);
+    let eigenvalues: Vec<f64> = model
+        .eigenvalues()
+        .iter()
+        .map(|v| v * factor * factor)
+        .collect();
+    close(bigger.eigenvalues(), &eigenvalues);
+    close(
+        bigger.explained_variance_ratio(),
+        model.explained_variance_ratio(),
+    );
+
+    // Reordering the samples reorders the scores only.
+    let swapped: Vec<f64> = data[101..202]
+        .iter()
+        .chain(&data[..101])
+        .chain(&data[202..])
+        .copied()
+        .collect();
+    let other = Pca::fit(&swapped, 101, 2).unwrap();
+    close(other.loadings(), model.loadings());
+    close(other.score(0).unwrap(), model.score(1).unwrap());
+    close(other.score(1).unwrap(), model.score(0).unwrap());
+}
+
+#[test]
+fn component_signs_are_deterministic() {
+    let data = mixtures(6);
+    let model = Pca::fit(&data, 101, 3).unwrap();
+    for a in 0..model.components() {
+        let loading = model.loading(a).unwrap();
+        let extreme = loading
+            .iter()
+            .fold(0.0_f64, |a, b| if b.abs() > a.abs() { *b } else { a });
+        assert!(extreme > 0.0, "component {a}: {extreme}");
+    }
+    // Negating the data keeps the loadings and negates the scores.
+    let negated: Vec<f64> = data.iter().map(|x| -x).collect();
+    let mirrored = Pca::fit(&negated, 101, 3).unwrap();
+    close(mirrored.loadings(), model.loadings());
+    let scores: Vec<f64> = model.scores().iter().map(|t| -t).collect();
+    close(mirrored.scores(), &scores);
+}
+
+#[test]
+fn diagnostics_separate_the_two_kinds_of_outlier() {
+    let data = mixtures(14);
+    let model = Pca::fit(&data, 101, 5).unwrap();
+    let training = data
+        .chunks_exact(101)
+        .map(|sample| model.project(sample).unwrap().diagnostics)
+        .collect::<Vec<_>>();
+    let worst_t2 = training.iter().fold(0.0_f64, |a, d| a.max(d.hotelling_t2));
+    let worst_q = training.iter().fold(0.0_f64, |a, d| a.max(d.q_residual));
+
+    // An unmodelled band leaves the component plane.
+    let extra = band(2300.0, 40.0);
+    let unmodelled: Vec<f64> = data[..101]
+        .iter()
+        .zip(&extra)
+        .map(|(x, e)| x + 0.3 * e)
+        .collect();
+    let outside = model.project(&unmodelled).unwrap().diagnostics;
+    assert!(
+        outside.q_residual > 100.0 * worst_q,
+        "{outside:?} against {worst_q}"
+    );
+
+    // A spectrum along a known direction stays in the plane but far out.
+    let mean = model.mean();
+    let along: Vec<f64> = data[..101]
+        .iter()
+        .zip(mean)
+        .map(|(x, m)| m + 8.0 * (x - m))
+        .collect();
+    let far = model.project(&along).unwrap().diagnostics;
+    assert!(
+        far.hotelling_t2 > 10.0 * worst_t2 && far.q_residual < 100.0 * worst_q,
+        "{far:?} against {worst_t2} and {worst_q}"
+    );
+}
+
+#[test]
+fn models_are_reusable_and_allocation_free() {
+    let data = mixtures(9);
+    let model = Pca::fit(&data, 101, 2).unwrap();
+    let mut scores = [0.0; 2];
+    for sample in data.chunks_exact(101) {
+        let diagnostics = model.project_into(sample, &mut scores).unwrap();
+        let projection = model.project(sample).unwrap();
+        close(&scores, &projection.scores);
+        assert_eq!(diagnostics, projection.diagnostics);
+    }
+    assert_eq!(model.samples(), 9);
+    assert_eq!(model.variables(), 101);
+    assert_eq!(model.components(), 2);
+    assert_eq!(model.loading(2), None);
+    assert_eq!(model.score(9), None);
+}
+
+#[test]
+fn rejects_invalid_shapes_and_counts() {
+    let data = pseudo_random(12, 3);
+    assert_eq!(
+        Pca::fit(&data, 5, 1).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 12,
+            variables: 5
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data, 0, 1).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 12,
+            variables: 0
+        }
+    );
+    assert_eq!(
+        Pca::fit(&[], 3, 1).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 0,
+            variables: 3
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data[..4], 4, 1).unwrap_err(),
+        Error::TooFewSamples {
+            length: 1,
+            minimum: 2
+        }
+    );
+    // Three samples of four variables support at most two components.
+    assert_eq!(
+        Pca::fit(&data, 4, 3).unwrap_err(),
+        Error::InvalidComponentCount {
+            requested: 3,
+            maximum: 2
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data, 4, 0).unwrap_err(),
+        Error::InvalidComponentCount {
+            requested: 0,
+            maximum: 2
+        }
+    );
+    // Six samples of two variables support at most two components.
+    assert!(Pca::fit(&data, 2, 2).is_ok());
+    assert_eq!(
+        Pca::fit(&data, 2, 3).unwrap_err(),
+        Error::InvalidComponentCount {
+            requested: 3,
+            maximum: 2
+        }
+    );
+}
+
+#[test]
+fn checks_inputs_in_order() {
+    let mut data = pseudo_random(12, 11);
+    data[7] = f64::NAN;
+    // The shape, the sample count and the component count come first.
+    assert_eq!(
+        Pca::fit(&data, 5, 1).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 12,
+            variables: 5
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data[..3], 3, 1).unwrap_err(),
+        Error::TooFewSamples {
+            length: 1,
+            minimum: 2
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data, 4, 9).unwrap_err(),
+        Error::InvalidComponentCount {
+            requested: 9,
+            maximum: 2
+        }
+    );
+    assert_eq!(
+        Pca::fit(&data, 4, 2).unwrap_err(),
+        Error::NonFiniteInput { index: 7 }
+    );
+    data[7] = f64::INFINITY;
+    assert_eq!(
+        Pca::fit(&data, 4, 2).unwrap_err(),
+        Error::NonFiniteInput { index: 7 }
+    );
+
+    let model = Pca::fit(&mixtures(6), 101, 2).unwrap();
+    let mut scores = [7.0; 2];
+    assert_eq!(
+        model.project_into(&[0.0; 100], &mut scores),
+        Err(Error::InvalidSpectrumLength {
+            expected: 101,
+            actual: 100
+        })
+    );
+    let mut wrong = [7.0; 3];
+    assert_eq!(
+        model.project_into(&[0.0; 101], &mut wrong),
+        Err(Error::OutputLengthMismatch {
+            expected: 2,
+            actual: 3
+        })
+    );
+    let mut spectrum = vec![0.0; 101];
+    spectrum[40] = f64::NAN;
+    assert_eq!(
+        model.project_into(&spectrum, &mut scores),
+        Err(Error::NonFiniteInput { index: 40 })
+    );
+    // Rejected inputs leave the buffer untouched.
+    assert_eq!(scores, [7.0; 2]);
+    assert_eq!(wrong, [7.0; 3]);
+}
+
+#[test]
+fn rejects_rank_deficient_data() {
+    // Identical samples carry no variation at all.
+    let constant = vec![0.5; 30];
+    assert_eq!(
+        Pca::fit(&constant, 3, 2).unwrap_err(),
+        Error::NumericalFailure
+    );
+    // Two directions of variation cannot support three components.
+    let mut data = Vec::new();
+    for i in 0..8 {
+        let a = i as f64;
+        let b = (i * i) as f64;
+        for j in 0..5 {
+            data.push(a * (j as f64) + b * ((j * j) as f64));
+        }
+    }
+    assert!(Pca::fit(&data, 5, 2).is_ok());
+    assert_eq!(Pca::fit(&data, 5, 3).unwrap_err(), Error::NumericalFailure);
+}
+
+#[test]
+fn handles_extreme_magnitudes() {
+    let base = mixtures(6);
+    let model = Pca::fit(&base, 101, 2).unwrap();
+    // Very small and very large spectra keep the structure of the original.
+    for exponent in [-200, 200] {
+        let factor = 2.0_f64.powi(exponent);
+        let shrunk: Vec<f64> = base.iter().map(|x| x * factor).collect();
+        let other = Pca::fit(&shrunk, 101, 2).unwrap();
+        close(other.loadings(), model.loadings());
+        let scores: Vec<f64> = model.scores().iter().map(|t| t * factor).collect();
+        close(other.scores(), &scores);
+        close(
+            other.explained_variance_ratio(),
+            model.explained_variance_ratio(),
+        );
+    }
+
+    // Beyond that the variances themselves leave the representable range.
+    for exponent in [-1000, 1000] {
+        let factor = 2.0_f64.powi(exponent);
+        let extreme: Vec<f64> = base.iter().map(|x| x * factor).collect();
+        assert_eq!(
+            Pca::fit(&extreme, 101, 2).unwrap_err(),
+            Error::NumericalFailure
+        );
+    }
+}
+
+/// Twelve spectra of forty variables whose component variances span many
+/// orders of magnitude, so scaling them pushes one variance below the
+/// representable range before the others.
+fn wide_spread() -> Vec<f64> {
+    let mut data = Vec::with_capacity(12 * 40);
+    for i in 0..12 {
+        for j in 0..40 {
+            let position = j as f64 / 40.0;
+            let first = (i as f64 * 0.7).sin();
+            let second = (i as f64 * 1.3).cos();
+            data.push(
+                first * (1.0 + position)
+                    + 1e-6 * second * (3.0 * position).cos()
+                    + 1e-12 * ((i * j) as f64).sin(),
+            );
+        }
+    }
+    data
+}
+
+#[test]
+fn rejects_variances_that_underflow() {
+    let base = wide_spread();
+    let scaled = |exponent: i32| -> Vec<f64> {
+        let factor = 2.0_f64.powi(exponent);
+        base.iter().map(|x| x * factor).collect()
+    };
+    let usable = scaled(-480);
+    let model = Pca::fit(&usable, 40, 3).unwrap();
+    assert!(model.eigenvalues().iter().all(|v| *v > 0.0));
+    assert!(model.project(&usable[..40]).is_ok());
+    // The smallest variance underflows here while the total is still positive,
+    // which would leave a model whose every projection fails.
+    assert_eq!(
+        Pca::fit(&scaled(-500), 40, 3).unwrap_err(),
+        Error::NumericalFailure
+    );
+    assert!(Pca::fit(&scaled(-500), 40, 2).is_ok());
+}
+
+#[test]
+fn numpy_reference() {
+    let fixture = include_str!("fixtures/numpy_pca.txt");
+    let mut model: Option<Pca> = None;
+    let mut magnitude = 0.0;
+    let mut case = 0;
+    let mut projections = 0;
+    for line in fixture.lines().filter(|line| !line.starts_with('#')) {
+        let mut parts = line.split('|');
+        let tag = parts.next().unwrap();
+        let context = format!(" ({tag}, case {case})");
+        match tag {
+            "case" => {
+                let (samples, variables, components) =
+                    (number(&mut parts), number(&mut parts), number(&mut parts));
+                let data = values(&mut parts);
+                assert_eq!(data.len(), samples * variables);
+                magnitude = largest(&data);
+                let fitted = Pca::fit(&data, variables, components).unwrap();
+                assert_eq!(fitted.samples(), samples);
+                assert_eq!(fitted.components(), components);
+                model = Some(fitted);
+                case += 1;
+            }
+            "project" => {
+                let model = model.as_ref().expect("case header");
+                let projection = model.project(&values(&mut parts)).unwrap();
+                let diagnostics = projection.diagnostics;
+                close_with(&projection.scores, &values(&mut parts), magnitude, &context);
+                close_with(
+                    &[diagnostics.hotelling_t2],
+                    &values(&mut parts),
+                    magnitude,
+                    &context,
+                );
+                close_with(
+                    &[diagnostics.q_residual],
+                    &values(&mut parts),
+                    magnitude * magnitude,
+                    &context,
+                );
+                projections += 1;
+            }
+            other => {
+                let model = model.as_ref().expect("case header");
+                let (actual, scale) = match other {
+                    "mean" => (model.mean(), magnitude),
+                    "eigenvalues" => (model.eigenvalues(), magnitude * magnitude),
+                    "ratios" => (model.explained_variance_ratio(), 1.0),
+                    "loadings" => (model.loadings(), 1.0),
+                    "scores" => (model.scores(), magnitude),
+                    unknown => panic!("unknown row {unknown}"),
+                };
+                close_with(actual, &values(&mut parts), scale, &context);
+            }
+        }
+        assert!(parts.next().is_none(), "trailing values{context}");
+    }
+    assert!(
+        case >= 19 && projections >= 40,
+        "{case} cases, {projections} projections"
+    );
+}
