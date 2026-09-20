@@ -1,5 +1,6 @@
 // Private numerical helpers shared by the public modules: least squares, sample
-// scaling, validation and buffers; intentionally not a general matrix API.
+// scaling, validation, buffers and the thin SVD adapter; intentionally not a
+// general matrix API.
 use crate::Error;
 
 fn check_capacity<T>(length: usize) -> Result<(), Error> {
@@ -94,7 +95,9 @@ pub(crate) struct Shift {
 /// Power-of-two divisor that maps the largest magnitude of a sample set into
 /// [1, 2), or `1.0` when every sample is zero.
 ///
-/// Dividing by it is exact, so `restore` undoes it without error.
+/// Dividing by it is exact, so scaled results are restored without error.
+/// Restoring states the units: `restore` for a quantity in sample units,
+/// `restore_squared` for one in their square, such as a variance.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Scale {
     factor: f64,
@@ -118,6 +121,11 @@ impl Scale {
 
     pub(crate) fn restore(self, x: f64) -> f64 {
         x * self.factor
+    }
+
+    #[cfg(feature = "pca")]
+    pub(crate) fn restore_squared(self, x: f64) -> f64 {
+        (x * self.factor) * self.factor
     }
 }
 
@@ -247,6 +255,70 @@ pub(crate) fn kernels(
     Ok(result)
 }
 
+/// Thin singular value decomposition of a row-major matrix, truncated to the
+/// leading `keep` components.
+///
+/// Singular values are nonnegative and sorted in nonincreasing order. This is
+/// the only place that uses a matrix library, so another backend would replace
+/// this function alone.
+#[cfg(feature = "pca")]
+pub(crate) struct ThinSvd {
+    /// Leading `keep` singular values.
+    pub(crate) values: Vec<f64>,
+    /// Left factor, `rows` × `keep`, row-major.
+    pub(crate) left: Vec<f64>,
+    /// Right factor transposed, `keep` × `columns`, row-major.
+    pub(crate) right: Vec<f64>,
+}
+
+/// Decomposes `matrix`, given row-major with `rows` × `columns` finite entries.
+///
+/// `keep` must not exceed `min(rows, columns)`. Returns
+/// [`Error::NumericalFailure`] if the decomposition fails or produces
+/// non-finite values. Allocations inside the backend are not fallible.
+#[cfg(feature = "pca")]
+pub(crate) fn thin_svd(
+    matrix: &[f64],
+    rows: usize,
+    columns: usize,
+    keep: usize,
+) -> Result<ThinSvd, Error> {
+    debug_assert_eq!(matrix.len(), rows * columns);
+    debug_assert!(keep <= rows.min(columns));
+    // Every product is bounded by `matrix.len()`, so it cannot overflow.
+    let mut values = zeros(keep)?;
+    let mut left = zeros(rows * keep)?;
+    let mut right = zeros(keep * columns)?;
+    let decomposition = faer::MatRef::from_row_major_slice(matrix, rows, columns)
+        .thin_svd()
+        .map_err(|_| Error::NumericalFailure)?;
+    let singular = decomposition.S().column_vector();
+    let u = decomposition.U();
+    let v = decomposition.V();
+    for (value, s) in values.iter_mut().zip(singular.iter()) {
+        *value = *s;
+    }
+    for (i, row) in left.chunks_exact_mut(keep).enumerate() {
+        for (a, value) in row.iter_mut().enumerate() {
+            *value = u[(i, a)];
+        }
+    }
+    for (a, row) in right.chunks_exact_mut(columns).enumerate() {
+        for (j, value) in row.iter_mut().enumerate() {
+            *value = v[(j, a)];
+        }
+    }
+    let finite = |slice: &[f64]| slice.iter().all(|x| x.is_finite());
+    if !finite(&values) || !finite(&left) || !finite(&right) {
+        return Err(Error::NumericalFailure);
+    }
+    Ok(ThinSvd {
+        values,
+        left,
+        right,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +353,8 @@ mod tests {
         assert_eq!(Shift::new(&[0.0, -0.0]).scale.restore(1.0), 1.0);
         let shift = Shift::new(&[0.5, -3.0]);
         assert_eq!(shift.scale.restore(1.0), 2.0);
+        #[cfg(feature = "pca")]
+        assert_eq!(shift.scale.restore_squared(1.0), 4.0);
         assert_eq!(shift.apply(0.5), 0.0);
         assert_eq!(shift.apply(-3.0), -1.75);
     }
