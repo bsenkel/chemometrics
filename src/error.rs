@@ -22,6 +22,27 @@ pub enum Error {
     },
     /// Sample spacing must be finite and nonzero.
     InvalidSampleSpacing,
+    /// Data length is not a positive multiple of the number of variables.
+    InvalidDataShape {
+        /// Actual data length.
+        length: usize,
+        /// Requested number of variables per sample.
+        variables: usize,
+    },
+    /// Spectrum length differs from the number of variables in a model.
+    InvalidSpectrumLength {
+        /// Required spectrum length.
+        expected: usize,
+        /// Actual spectrum length.
+        actual: usize,
+    },
+    /// Component count is zero or exceeds what the data supports.
+    InvalidComponentCount {
+        /// Requested number of components.
+        requested: usize,
+        /// Largest supported number of components.
+        maximum: usize,
+    },
     /// Input contains fewer points than one window.
     SignalTooShort {
         /// Actual input length.
@@ -72,6 +93,17 @@ impl fmt::Display for Error {
                 f, "derivative order {derivative_order} must not exceed polynomial order {polynomial_order}"
             ),
             Self::InvalidSampleSpacing => f.write_str("sample spacing must be finite and nonzero"),
+            Self::InvalidDataShape { length, variables } => write!(
+                f,
+                "data length {length} must be a positive multiple of {variables} variables"
+            ),
+            Self::InvalidSpectrumLength { expected, actual } => {
+                write!(f, "spectrum length must be {expected}, got {actual}")
+            }
+            Self::InvalidComponentCount { requested, maximum } => write!(
+                f,
+                "component count {requested} must be between 1 and {maximum}"
+            ),
             Self::SignalTooShort {
                 length,
                 window_length,
