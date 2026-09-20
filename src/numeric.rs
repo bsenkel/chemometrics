@@ -87,28 +87,52 @@ pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Resu
 /// (Sterbenz lemma), so a large offset cannot round away a small variation.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Shift {
-    /// Divisor applied to every sample; `1.0` for an all-zero input.
-    pub(crate) scale: f64,
+    pub(crate) scale: Scale,
     reference: f64,
+}
+
+/// Power-of-two divisor that maps the largest magnitude of a sample set into
+/// [1, 2), or `1.0` when every sample is zero.
+///
+/// Dividing by it is exact, so `restore` undoes it without error.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Scale {
+    factor: f64,
+}
+
+impl Scale {
+    /// Assumes `values` is finite.
+    pub(crate) fn new(values: &[f64]) -> Self {
+        let magnitude = values.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
+        let factor = if magnitude == 0.0 {
+            1.0
+        } else {
+            power_of_two_floor(magnitude)
+        };
+        Self { factor }
+    }
+
+    pub(crate) fn divide(self, x: f64) -> f64 {
+        x / self.factor
+    }
+
+    pub(crate) fn restore(self, x: f64) -> f64 {
+        x * self.factor
+    }
 }
 
 impl Shift {
     /// Assumes `input` is nonempty and finite.
     pub(crate) fn new(input: &[f64]) -> Self {
-        let magnitude = input.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
-        let scale = if magnitude == 0.0 {
-            1.0
-        } else {
-            power_of_two_floor(magnitude)
-        };
+        let scale = Scale::new(input);
         Self {
             scale,
-            reference: input[0] / scale,
+            reference: scale.divide(input[0]),
         }
     }
 
     pub(crate) fn apply(self, x: f64) -> f64 {
-        x / self.scale - self.reference
+        self.scale.divide(x) - self.reference
     }
 }
 
@@ -254,9 +278,9 @@ mod tests {
 
     #[test]
     fn shift_scales_by_a_power_of_two_and_subtracts_the_first_sample() {
-        assert_eq!(Shift::new(&[0.0, -0.0]).scale, 1.0);
+        assert_eq!(Shift::new(&[0.0, -0.0]).scale.restore(1.0), 1.0);
         let shift = Shift::new(&[0.5, -3.0]);
-        assert_eq!(shift.scale, 2.0);
+        assert_eq!(shift.scale.restore(1.0), 2.0);
         assert_eq!(shift.apply(0.5), 0.0);
         assert_eq!(shift.apply(-3.0), -1.75);
     }

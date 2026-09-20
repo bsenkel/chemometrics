@@ -148,7 +148,7 @@ impl Detrend {
             }
         }
         for out in output.iter_mut() {
-            *out *= shift.scale;
+            *out = shift.scale.restore(*out);
             if !out.is_finite() {
                 return Err(Error::NumericalFailure);
             }
