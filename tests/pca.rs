@@ -7,13 +7,12 @@ fn largest(values: &[f64]) -> f64 {
     values.iter().fold(0.0_f64, |a, b| a.max(b.abs()))
 }
 
-/// Compares with the usual tolerance plus a term for the data magnitude.
+/// Asserts each value lies within `floor` plus 1e-10 of its own magnitude.
 ///
-/// Centring a spectrum on a large offset loses absolute precision in
-/// proportion to that offset, in any implementation.
-fn close_with(actual: &[f64], expected: &[f64], magnitude: f64, context: impl std::fmt::Display) {
+/// The floor carries the scale of the quantity, not a fixed absolute value,
+/// so spectra of any magnitude are checked equally strictly.
+fn close_with(actual: &[f64], expected: &[f64], floor: f64, context: impl std::fmt::Display) {
     assert_eq!(actual.len(), expected.len(), "length{context}");
-    let floor = 1e-10 + 1e3 * f64::EPSILON * magnitude;
     for (i, (&a, &b)) in actual.iter().zip(expected).enumerate() {
         assert!(
             a.is_finite() && b.is_finite() && (a - b).abs() <= floor + 1e-10 * b.abs(),
@@ -22,8 +21,15 @@ fn close_with(actual: &[f64], expected: &[f64], magnitude: f64, context: impl st
     }
 }
 
+/// Compares a quantity whose scale is its own largest value.
 fn close(actual: &[f64], expected: &[f64]) {
-    close_with(actual, expected, largest(expected), "");
+    close_scaled(actual, expected, largest(expected));
+}
+
+/// Compares part of a quantity, such as the scores of one sample, against the
+/// scale of the whole.
+fn close_scaled(actual: &[f64], expected: &[f64], scale: f64) {
+    close_with(actual, expected, 1e-10 * scale, "");
 }
 
 type Fields<'a> = std::str::Split<'a, char>;
@@ -160,7 +166,11 @@ fn training_projections_match_the_stored_scores() {
     let mut total = 0.0;
     for (i, sample) in data.chunks_exact(101).enumerate() {
         let projection = model.project(sample).unwrap();
-        close(&projection.scores, model.score(i).unwrap());
+        close_scaled(
+            &projection.scores,
+            model.score(i).unwrap(),
+            largest(model.scores()),
+        );
         total += projection.diagnostics.hotelling_t2;
     }
     // The mean of T² over the training samples is k (n − 1) / n.
@@ -218,8 +228,9 @@ fn model_is_invariant_under_offsets_and_scaling() {
         .collect();
     let other = Pca::fit(&swapped, 101, 2).unwrap();
     close(other.loadings(), model.loadings());
-    close(other.score(0).unwrap(), model.score(1).unwrap());
-    close(other.score(1).unwrap(), model.score(0).unwrap());
+    let scale = largest(model.scores());
+    close_scaled(other.score(0).unwrap(), model.score(1).unwrap(), scale);
+    close_scaled(other.score(1).unwrap(), model.score(0).unwrap(), scale);
 }
 
 #[test]
@@ -287,7 +298,7 @@ fn models_are_reusable_and_allocation_free() {
     for sample in data.chunks_exact(101) {
         let diagnostics = model.project_into(sample, &mut scores).unwrap();
         let projection = model.project(sample).unwrap();
-        close(&scores, &projection.scores);
+        close_scaled(&scores, &projection.scores, largest(model.scores()));
         assert_eq!(diagnostics, projection.diagnostics);
     }
     assert_eq!(model.samples(), 9);
@@ -512,7 +523,8 @@ fn rejects_variances_that_underflow() {
 fn numpy_reference() {
     let fixture = include_str!("fixtures/numpy_pca.txt");
     let mut model: Option<Pca> = None;
-    let mut magnitude = 0.0;
+    let (mut magnitude, mut precision, mut score_scale) = (0.0, 0.0, f64::NAN);
+    let mut centre = Vec::new();
     let mut case = 0;
     let mut projections = 0;
     for line in fixture.lines().filter(|line| !line.starts_with('#')) {
@@ -525,43 +537,85 @@ fn numpy_reference() {
                     (number(&mut parts), number(&mut parts), number(&mut parts));
                 let data = values(&mut parts);
                 assert_eq!(data.len(), samples * variables);
-                magnitude = largest(&data);
                 let fitted = Pca::fit(&data, variables, components).unwrap();
                 assert_eq!(fitted.samples(), samples);
                 assert_eq!(fitted.components(), components);
+                // The tolerance scales come from the data alone, never from the
+                // results under test.
+                centre = (0..variables)
+                    .map(|j| data.iter().skip(j).step_by(variables).sum::<f64>() / samples as f64)
+                    .collect();
+                // Centring loses relative precision in proportion to the
+                // magnitude of the data over its spread, in any implementation.
+                magnitude = largest(&data);
+                let spread = data
+                    .chunks_exact(variables)
+                    .flat_map(|row| row.iter().zip(&centre).map(|(x, m)| (x - m).abs()))
+                    .fold(0.0_f64, f64::max);
+                precision = 1e-10 + 1e3 * f64::EPSILON * magnitude / spread;
+                score_scale = f64::NAN;
                 model = Some(fitted);
                 case += 1;
             }
             "project" => {
                 let model = model.as_ref().expect("case header");
-                let projection = model.project(&values(&mut parts)).unwrap();
+                let spectrum = values(&mut parts);
+                let projection = model.project(&spectrum).unwrap();
                 let diagnostics = projection.diagnostics;
-                close_with(&projection.scores, &values(&mut parts), magnitude, &context);
-                close_with(
-                    &[diagnostics.hotelling_t2],
-                    &values(&mut parts),
-                    magnitude,
-                    &context,
+                let scores = values(&mut parts);
+                assert!(
+                    score_scale.is_finite(),
+                    "scores row precedes projections{context}"
                 );
                 close_with(
+                    &projection.scores,
+                    &scores,
+                    precision * score_scale,
+                    &context,
+                );
+                // T² is dimensionless; about one per component is typical.
+                let t2 = values(&mut parts);
+                let typical = t2[0].max(model.components() as f64);
+                close_with(
+                    &[diagnostics.hotelling_t2],
+                    &t2,
+                    precision * typical,
+                    &context,
+                );
+                // Q is part of the squared distance of the spectrum from the mean.
+                let distance: f64 = spectrum
+                    .iter()
+                    .zip(&centre)
+                    .map(|(x, m)| (x - m).powi(2))
+                    .sum();
+                let q = values(&mut parts);
+                close_with(
                     &[diagnostics.q_residual],
-                    &values(&mut parts),
-                    magnitude * magnitude,
+                    &q,
+                    precision * distance,
                     &context,
                 );
                 projections += 1;
             }
             other => {
                 let model = model.as_ref().expect("case header");
-                let (actual, scale) = match other {
-                    "mean" => (model.mean(), magnitude),
-                    "eigenvalues" => (model.eigenvalues(), magnitude * magnitude),
-                    "ratios" => (model.explained_variance_ratio(), 1.0),
-                    "loadings" => (model.loadings(), 1.0),
-                    "scores" => (model.scores(), magnitude),
+                let expected = values(&mut parts);
+                let (actual, floor) = match other {
+                    // The mean is not affected by centring.
+                    "mean" => (model.mean(), (1e-10 + 1e3 * f64::EPSILON) * magnitude),
+                    "eigenvalues" => (model.eigenvalues(), precision * largest(&expected)),
+                    "ratios" => (
+                        model.explained_variance_ratio(),
+                        precision * largest(&expected),
+                    ),
+                    "loadings" => (model.loadings(), precision),
+                    "scores" => {
+                        score_scale = largest(&expected);
+                        (model.scores(), precision * score_scale)
+                    }
                     unknown => panic!("unknown row {unknown}"),
                 };
-                close_with(actual, &values(&mut parts), scale, &context);
+                close_with(actual, &expected, floor, &context);
             }
         }
         assert!(parts.next().is_none(), "trailing values{context}");
