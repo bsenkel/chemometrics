@@ -401,25 +401,29 @@ fn checks_inputs_in_order() {
         Error::NonFiniteInput { index: 7 }
     );
 
+    // The spectrum length comes before the buffer length and non-finite
+    // values, the buffer length before non-finite values.
     let model = Pca::fit(&mixtures(6), 101, 2).unwrap();
     let mut scores = [7.0; 2];
+    let mut wrong = [7.0; 3];
+    let mut short = vec![0.0; 100];
+    short[40] = f64::NAN;
     assert_eq!(
-        model.project_into(&[0.0; 100], &mut scores),
+        model.project_into(&short, &mut wrong),
         Err(Error::InvalidSpectrumLength {
             expected: 101,
             actual: 100
         })
     );
-    let mut wrong = [7.0; 3];
+    let mut spectrum = vec![0.0; 101];
+    spectrum[40] = f64::NAN;
     assert_eq!(
-        model.project_into(&[0.0; 101], &mut wrong),
+        model.project_into(&spectrum, &mut wrong),
         Err(Error::OutputLengthMismatch {
             expected: 2,
             actual: 3
         })
     );
-    let mut spectrum = vec![0.0; 101];
-    spectrum[40] = f64::NAN;
     assert_eq!(
         model.project_into(&spectrum, &mut scores),
         Err(Error::NonFiniteInput { index: 40 })
