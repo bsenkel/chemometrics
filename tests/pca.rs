@@ -291,7 +291,7 @@ fn diagnostics_separate_the_two_kinds_of_outlier() {
 }
 
 #[test]
-fn models_are_reusable_and_allocation_free() {
+fn project_into_matches_project() {
     let data = mixtures(9);
     let model = Pca::fit(&data, 101, 2).unwrap();
     let mut scores = [0.0; 2];
@@ -455,6 +455,28 @@ fn rejects_rank_deficient_data() {
 }
 
 #[test]
+fn rank_tolerance_scales_with_the_matrix_size() {
+    // Four samples of forty variables with exactly orthogonal, centred
+    // columns, so the singular values are 1 and `second`. The tolerance for
+    // this size is 40 EPSILON, which the two cases bracket by a wide margin.
+    let data = |second: f64| -> Vec<f64> {
+        let first = [0.5, -0.5, 0.5, -0.5];
+        let other = [0.5, 0.5, -0.5, -0.5];
+        let mut data = vec![0.0; 4 * 40];
+        for i in 0..4 {
+            data[i * 40] = first[i];
+            data[i * 40 + 1] = second * other[i];
+        }
+        data
+    };
+    assert_eq!(
+        Pca::fit(&data(8.0 * f64::EPSILON), 40, 2).unwrap_err(),
+        Error::NumericalFailure
+    );
+    assert!(Pca::fit(&data(1e4 * f64::EPSILON), 40, 2).is_ok());
+}
+
+#[test]
 fn handles_extreme_magnitudes() {
     let base = mixtures(6);
     let model = Pca::fit(&base, 101, 2).unwrap();
@@ -501,6 +523,30 @@ fn wide_spread() -> Vec<f64> {
         }
     }
     data
+}
+
+#[test]
+fn rejects_a_total_variance_that_overflows() {
+    // Two orthogonal centred columns whose variances are each 0.75 f64::MAX:
+    // the kept eigenvalue fits, the total does not, and the explained share
+    // would otherwise silently become zero.
+    let size = 1.5 * f64::MAX.sqrt();
+    let first = [0.5, -0.5, 0.5, -0.5];
+    let other = [0.5, 0.5, -0.5, -0.5];
+    let data: Vec<f64> = (0..4)
+        .flat_map(|i| [size * first[i], size * other[i]])
+        .collect();
+    assert_eq!(Pca::fit(&data, 2, 1).unwrap_err(), Error::NumericalFailure);
+}
+
+#[test]
+fn projections_beyond_the_representable_range_fail() {
+    let model = Pca::fit(&mixtures(6), 101, 2).unwrap();
+    let mut scores = [0.0; 2];
+    assert_eq!(
+        model.project_into(&[f64::MAX; 101], &mut scores),
+        Err(Error::NumericalFailure)
+    );
 }
 
 #[test]

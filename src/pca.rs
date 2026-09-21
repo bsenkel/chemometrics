@@ -379,3 +379,27 @@ impl Pca {
         Err(Error::NumericalFailure)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_first_of_tied_extremes_fixes_the_sign() {
+        let mut model = Pca {
+            samples: 2,
+            variables: 2,
+            components: 1,
+            scale: numeric::Scale::new(&[1.0]),
+            mean: vec![0.0; 2],
+            loadings: vec![-0.5, 0.5],
+            scores: vec![1.0, -1.0],
+            eigenvalues: vec![1.0],
+            ratios: vec![1.0],
+            total_variance: 1.0,
+        };
+        model.orient();
+        assert_eq!(model.loadings, [0.5, -0.5]);
+        assert_eq!(model.scores, [-1.0, 1.0]);
+    }
+}
