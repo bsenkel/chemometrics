@@ -32,6 +32,7 @@ pub struct Diagnostics {
 
 /// Scores and diagnostics of one projected spectrum.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Projection {
     /// One score per component.
     pub scores: Vec<f64>,
