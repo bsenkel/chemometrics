@@ -255,15 +255,15 @@ pub(crate) fn kernels(
     Ok(result)
 }
 
-/// Thin singular value decomposition of a row-major matrix, truncated to the
-/// leading `keep` components.
+/// Thin singular value decomposition of a row-major matrix, with the factors
+/// truncated to the leading `keep` components.
 ///
 /// Singular values are nonnegative and sorted in nonincreasing order. This is
 /// the only place that uses a matrix library, so another backend would replace
 /// this function alone.
 #[cfg(feature = "pca")]
 pub(crate) struct ThinSvd {
-    /// Leading `keep` singular values.
+    /// All `min(rows, columns)` singular values, not only the kept ones.
     pub(crate) values: Vec<f64>,
     /// Left factor, `rows` × `keep`, row-major.
     pub(crate) left: Vec<f64>,
@@ -312,10 +312,8 @@ pub(crate) fn thin_svd(
         Default::default(),
     )
     .map_err(|_| Error::NumericalFailure)?;
-    let mut values = zeros(keep)?;
     let mut left = zeros(rows * keep)?;
     let mut right = zeros(keep * columns)?;
-    values.copy_from_slice(&singular[..keep]);
     for (i, row) in left.chunks_exact_mut(keep).enumerate() {
         for (a, value) in row.iter_mut().enumerate() {
             *value = u[a * rows + i];
@@ -324,11 +322,11 @@ pub(crate) fn thin_svd(
     // Column `a` of the column-major V is row `a` of its transpose.
     right.copy_from_slice(&v[..keep * columns]);
     let finite = |slice: &[f64]| slice.iter().all(|x| x.is_finite());
-    if !finite(&values) || !finite(&left) || !finite(&right) {
+    if !finite(&singular) || !finite(&left) || !finite(&right) {
         return Err(Error::NumericalFailure);
     }
     Ok(ThinSvd {
-        values,
+        values: singular,
         left,
         right,
     })

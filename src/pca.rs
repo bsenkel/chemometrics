@@ -50,7 +50,7 @@ pub struct Diagnostics {
     /// prediction error.
     ///
     /// Control limits follow Jackson and Mudholkar, from the discarded
-    /// eigenvalues.
+    /// eigenvalues in [`Pca::all_eigenvalues`].
     pub q_residual: f64,
 }
 
@@ -99,6 +99,7 @@ pub struct Pca {
     mean: Vec<f64>,
     loadings: Vec<f64>,
     scores: Vec<f64>,
+    /// All `min(samples − 1, variables)` eigenvalues, the kept ones first.
     eigenvalues: Vec<f64>,
     ratios: Vec<f64>,
     total_variance: f64,
@@ -115,7 +116,7 @@ impl fmt::Debug for Pca {
             .field("samples", &self.samples)
             .field("variables", &self.variables)
             .field("components", &self.components)
-            .field("eigenvalues", &self.eigenvalues)
+            .field("eigenvalues", &self.eigenvalues())
             .finish_non_exhaustive()
     }
 }
@@ -201,17 +202,22 @@ impl Pca {
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
         let threshold = f64::EPSILON * samples.max(variables) as f64 * uncentred_norm;
-        if svd.values.iter().any(|s| *s <= threshold) {
+        let kept = &svd.values[..components];
+        if kept.iter().any(|s| *s <= threshold) {
             return Err(Error::NumericalFailure);
+        }
+        // Centring removes one direction, so with no more samples than
+        // variables the last singular value is rounding, not variation.
+        let mut eigenvalues = numeric::zeros(maximum)?;
+        for (eigenvalue, value) in eigenvalues.iter_mut().zip(&svd.values) {
+            *eigenvalue = scale.restore_squared(value * value / degrees);
         }
         // Shares and T² do not depend on the scale, so they are taken from the
         // scaled values, which keep full precision for any data magnitude.
-        let mut eigenvalues = numeric::zeros(components)?;
         let mut ratios = numeric::zeros(components)?;
         let mut deviations = numeric::zeros(components)?;
-        for (a, value) in svd.values.iter().enumerate() {
+        for (a, value) in kept.iter().enumerate() {
             let scaled = value * value / degrees;
-            eigenvalues[a] = scale.restore_squared(scaled);
             ratios[a] = scaled / variance;
             deviations[a] = scaled.sqrt();
         }
@@ -221,7 +227,7 @@ impl Pca {
             .chunks_exact_mut(components)
             .zip(svd.left.chunks_exact(components))
         {
-            for ((score, u), value) in row.iter_mut().zip(left).zip(&svd.values) {
+            for ((score, u), value) in row.iter_mut().zip(left).zip(kept) {
                 *score = scale.restore(u * value);
             }
         }
@@ -296,6 +302,21 @@ impl Pca {
 
     /// Variance of each component's training scores, using `samples − 1`.
     pub fn eigenvalues(&self) -> &[f64] {
+        &self.eigenvalues[..self.components]
+    }
+
+    /// Eigenvalues of all `min(samples − 1, variables)` components, the
+    /// retained ones first, in nonincreasing order.
+    ///
+    /// The discarded eigenvalues `all_eigenvalues()[components..]` give the
+    /// Jackson–Mudholkar limit for Q, and divided by [`Pca::total_variance`]
+    /// they show how many components the data supports, even where fitting
+    /// that many fails. Preprocessing such as SNV or detrending removes
+    /// directions from the data, so trailing eigenvalues can be rounding rather
+    /// than variation: those at or below the square of the rounding bound
+    /// described on [`Pca::fit`], divided by `samples − 1`. Eigenvalues far
+    /// below the largest may underflow to zero.
+    pub fn all_eigenvalues(&self) -> &[f64] {
         &self.eigenvalues
     }
 
@@ -424,7 +445,7 @@ impl Pca {
         let finite = |values: &[f64]| values.iter().all(|x| x.is_finite());
         if self.total_variance.is_finite()
             && self.total_variance > 0.0
-            && self.eigenvalues.iter().all(|v| *v > 0.0)
+            && self.eigenvalues().iter().all(|v| *v > 0.0)
             && finite(&self.mean)
             && finite(&self.ratios)
             && finite(&self.scores)
