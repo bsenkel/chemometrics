@@ -1,6 +1,6 @@
 use std::fmt;
 
-/// Invalid input, allocation failure, or a numerical failure during filtering.
+/// Invalid input, allocation failure, or a numerical failure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Error {
@@ -50,11 +50,12 @@ pub enum Error {
         /// Required minimum length.
         window_length: usize,
     },
-    /// Input contains fewer samples than the operation requires.
+    /// Input contains fewer samples than the operation requires: values of a
+    /// spectrum for per-spectrum transforms, spectra for principal components.
     TooFewSamples {
-        /// Actual input length.
+        /// Actual number of samples.
         length: usize,
-        /// Required minimum length.
+        /// Required minimum number of samples.
         minimum: usize,
     },
     /// Output length differs from input length.
@@ -69,8 +70,8 @@ pub enum Error {
         /// Index of the first non-finite sample.
         index: usize,
     },
-    /// The fit is numerically rank deficient, derivative scaling is unrepresentable,
-    /// or arithmetic became non-finite.
+    /// A fit is numerically rank deficient, a scaling or a result is
+    /// unrepresentable, or arithmetic became non-finite.
     NumericalFailure,
     /// A requested allocation exceeds addressable capacity or could not be reserved.
     AllocationFailure,
@@ -120,7 +121,7 @@ impl fmt::Display for Error {
             Self::NonFiniteInput { index } => write!(f, "non-finite input at index {index}"),
             Self::AllocationFailure => f.write_str("requested memory capacity is unavailable"),
             Self::NumericalFailure => {
-                f.write_str("numerical rank deficiency, unrepresentable derivative scaling, or non-finite arithmetic")
+                f.write_str("numerical rank deficiency, unrepresentable scaling or result, or non-finite arithmetic")
             }
         }
     }

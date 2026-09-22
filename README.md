@@ -151,8 +151,9 @@ A set of spectra is one flat row-major slice plus the number of variables per
 sample, which is the layout of a NumPy array or an `ndarray` row-major view, so
 no matrix type appears in the API. `Pca::fit` mean-centers the data and keeps
 the requested number of components, at most `min(samples - 1, variables)`.
-Individual variables are never scaled: spectral variables share one unit, and
-autoscaling would amplify noise-only wavelengths.
+`fit` does not scale individual variables: spectral variables share one unit,
+and autoscaling would amplify noise-only wavelengths. Autoscaling for other data
+is planned as a separate method.
 
 `Pca::project` places a further spectrum in the model and returns its scores
 together with Hotelling's T², the squared distance inside the component plane,
@@ -165,19 +166,25 @@ Control limits are not computed; their formulas are documented on the
 
 Eigenvalues are score variances with divisor `samples - 1`, and
 `explained_variance_ratio` divides them by the total variance of the centered
-data, so the shares sum to one exactly when every component is kept. The sign of
-a component is fixed by making its largest-magnitude loading positive, which
-keeps results reproducible. Components whose eigenvalues are nearly equal are
-not determined by the data. A requested component that is numerically
-indistinguishable from zero gives `Error::NumericalFailure`.
+data, so the shares sum to one, up to rounding, when every component is kept.
+The sign of a component is fixed by making its largest-magnitude loading
+positive; loadings within a relative √ε of the largest count as equally large
+and the first of them decides, so rounding cannot flip a component and results
+stay reproducible. Components whose eigenvalues are nearly equal are not
+determined by the data. A requested component that cannot be told apart from
+rounding in the uncentered data gives `Error::NumericalFailure`.
 
-Fitting takes O(samples × variables × min(samples, variables)) time, holds one
-centered copy of the data besides the factors of the decomposition, and runs on
-a single thread. The copy is scaled by a power of two, so spectra of extreme
-magnitude stay stable; magnitudes whose variances no longer fit into an `f64`
-are rejected. Results are not bit-identical across CPU architectures, since the
-decomposition uses SIMD, and allocations inside it abort on failure instead of
-reporting `Error::AllocationFailure` as this crate's own buffers do.
+Fitting takes O(samples × variables × min(samples, variables)) time and runs on
+a single thread. At its peak it holds a few times the size of the data: the
+centered copy, the decomposition's working copies and its factors. The data is
+scaled by a power of two, so spectra of extreme magnitude stay stable;
+magnitudes whose variances no longer fit into an `f64` are rejected. A spectrum
+far larger or smaller than the training data still gets its scores and Q
+residual wherever they fit into an `f64`. Results are not bit-identical across
+CPU architectures, since the decomposition uses SIMD. Its working memory is
+reserved like this crate's own buffers, but its matrix kernels may still
+allocate internally and abort on failure instead of reporting
+`Error::AllocationFailure`.
 
 The feature costs about 50 additional crates through
 [`faer`](https://crates.io/crates/faer), a pure-Rust linear algebra library that

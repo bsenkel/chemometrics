@@ -2,11 +2,34 @@
 //!
 //! Spectra are passed as one flat row-major slice: row `i` holds the
 //! `variables` intensities of sample `i`. The model mean-centers the data and
-//! keeps the leading components; it never scales individual variables, because
-//! spectral variables share one unit and autoscaling would amplify noise.
+//! keeps the leading components. [`Pca::fit`] does not scale individual
+//! variables, because spectral variables share one unit and autoscaling would
+//! amplify noise; autoscaling for other data is planned as a separate method.
 //!
 //! [`Pca::project`] places a further spectrum in the model and reports
 //! Hotelling's T² and the Q residual, the two standard outlier statistics.
+//!
+//! # Example
+//! ```
+//! use chemometrics::pca::Pca;
+//!
+//! // Four spectra of three wavelengths each, row-major.
+//! let data = [
+//!     1.0, 2.0, 3.0, //
+//!     2.0, 4.1, 6.0, //
+//!     3.0, 5.9, 9.0, //
+//!     4.0, 8.0, 12.0,
+//! ];
+//! let model = Pca::fit(&data, 3, 2)?;
+//! println!("explained: {:?}", model.explained_variance_ratio());
+//!
+//! let projection = model.project(&[2.0, 4.0, 6.0])?;
+//! let diagnostics = projection.diagnostics;
+//! println!("T² {}, Q {}", diagnostics.hotelling_t2, diagnostics.q_residual);
+//! # assert_eq!(projection.scores.len(), 2);
+//! # assert!(model.explained_variance_ratio()[0] > 0.99);
+//! # Ok::<(), chemometrics::Error>(())
+//! ```
 use crate::{Error, numeric};
 use std::fmt;
 
@@ -43,10 +66,12 @@ pub struct Projection {
 
 /// A fitted principal component model.
 ///
-/// Fitting takes O(samples × variables × min(samples, variables)) time, holds
-/// one centred copy of the data besides the factors of the decomposition, and
-/// runs on a single thread. The model itself stores the mean, the loadings and
-/// the training scores.
+/// Fitting takes O(samples × variables × min(samples, variables)) time and runs
+/// on a single thread. At its peak it holds a few times the size of the data:
+/// the centred copy, the decomposition's working copies and its factors. The
+/// model keeps the mean, the loadings, the training scores and the variances,
+/// but not the data. `Debug` prints the shape and the eigenvalues only, since
+/// the buffers can hold millions of values.
 ///
 /// # Example
 /// ```
@@ -277,8 +302,8 @@ impl Pca {
     /// Share of the total variance carried by each component.
     ///
     /// The total is the variance of the centred data over all variables, not
-    /// only the part the retained components cover, so the shares sum to one
-    /// exactly when every component is retained.
+    /// only the part the retained components cover, so the shares sum to one,
+    /// up to rounding, when every component is retained.
     pub fn explained_variance_ratio(&self) -> &[f64] {
         &self.ratios
     }
@@ -290,7 +315,10 @@ impl Pca {
 
     /// Projects a spectrum into a newly allocated [`Projection`].
     ///
-    /// Returns [`Error::AllocationFailure`] if the scores cannot be reserved.
+    /// # Errors
+    /// Returns [`Error::InvalidSpectrumLength`], [`Error::NonFiniteInput`] or
+    /// [`Error::NumericalFailure`] as [`Self::project_into`] does, and
+    /// [`Error::AllocationFailure`] if the scores cannot be reserved.
     pub fn project(&self, spectrum: &[f64]) -> Result<Projection, Error> {
         let mut scores = numeric::zeros(self.components)?;
         let diagnostics = self.project_into(spectrum, &mut scores)?;
