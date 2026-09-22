@@ -283,31 +283,46 @@ pub(crate) fn thin_svd(
     columns: usize,
     keep: usize,
 ) -> Result<ThinSvd, Error> {
+    use faer::dyn_stack::{MemBuffer, MemStack};
+    use faer::linalg::svd::{self, ComputeSvdVectors};
     debug_assert_eq!(matrix.len(), rows * columns);
     debug_assert!(keep <= rows.min(columns));
+    let size = rows.min(columns);
     // Every product is bounded by `matrix.len()`, so it cannot overflow.
+    let mut singular = zeros(size)?;
+    let mut u = zeros(rows * size)?;
+    let mut v = zeros(columns * size)?;
+    // An explicit sequential `Par` keeps the decomposition independent of
+    // faer's global parallelism, which other crates may enable or disable.
+    let par = faer::Par::Seq;
+    let thin = ComputeSvdVectors::Thin;
+    let request = svd::svd_scratch::<f64>(rows, columns, thin, thin, par, Default::default());
+    let mut workspace = MemBuffer::try_new(request).map_err(|_| Error::AllocationFailure)?;
+    svd::svd(
+        faer::MatRef::from_row_major_slice(matrix, rows, columns),
+        faer::ColMut::from_slice_mut(&mut singular).as_diagonal_mut(),
+        Some(faer::MatMut::from_column_major_slice_mut(
+            &mut u, rows, size,
+        )),
+        Some(faer::MatMut::from_column_major_slice_mut(
+            &mut v, columns, size,
+        )),
+        par,
+        MemStack::new(&mut workspace),
+        Default::default(),
+    )
+    .map_err(|_| Error::NumericalFailure)?;
     let mut values = zeros(keep)?;
     let mut left = zeros(rows * keep)?;
     let mut right = zeros(keep * columns)?;
-    let decomposition = faer::MatRef::from_row_major_slice(matrix, rows, columns)
-        .thin_svd()
-        .map_err(|_| Error::NumericalFailure)?;
-    let singular = decomposition.S().column_vector();
-    let u = decomposition.U();
-    let v = decomposition.V();
-    for (value, s) in values.iter_mut().zip(singular.iter()) {
-        *value = *s;
-    }
+    values.copy_from_slice(&singular[..keep]);
     for (i, row) in left.chunks_exact_mut(keep).enumerate() {
         for (a, value) in row.iter_mut().enumerate() {
-            *value = u[(i, a)];
+            *value = u[a * rows + i];
         }
     }
-    for (a, row) in right.chunks_exact_mut(columns).enumerate() {
-        for (j, value) in row.iter_mut().enumerate() {
-            *value = v[(j, a)];
-        }
-    }
+    // Column `a` of the column-major V is row `a` of its transpose.
+    right.copy_from_slice(&v[..keep * columns]);
     let finite = |slice: &[f64]| slice.iter().all(|x| x.is_finite());
     if !finite(&values) || !finite(&left) || !finite(&right) {
         return Err(Error::NumericalFailure);

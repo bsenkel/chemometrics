@@ -97,9 +97,9 @@ impl Pca {
     /// [`Error::NumericalFailure`] if a requested component is numerically
     /// indistinguishable from zero, so its direction would be arbitrary, or if
     /// the variances of such large or small values overflow or underflow.
-    /// Returns [`Error::AllocationFailure`] if the model or the working copy
-    /// cannot be reserved; allocations inside the decomposition itself are not
-    /// fallible and abort on failure.
+    /// Returns [`Error::AllocationFailure`] if the model or the working memory
+    /// cannot be reserved; allocations inside the decomposition's matrix
+    /// kernels may still abort on failure.
     ///
     /// # Example
     /// ```

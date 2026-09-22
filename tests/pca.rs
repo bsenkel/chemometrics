@@ -477,6 +477,14 @@ fn rank_tolerance_scales_with_the_matrix_size() {
 }
 
 #[test]
+fn fit_ignores_faer_global_parallelism() {
+    // Applications may configure faer themselves; the decomposition runs on
+    // one thread regardless. Before, this setting made the fit panic.
+    faer::disable_global_parallelism();
+    assert!(Pca::fit(&mixtures(6), 101, 2).is_ok());
+}
+
+#[test]
 fn handles_extreme_magnitudes() {
     let base = mixtures(6);
     let model = Pca::fit(&base, 101, 2).unwrap();
