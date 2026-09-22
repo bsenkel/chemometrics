@@ -578,6 +578,36 @@ fn wide_spread() -> Vec<f64> {
 }
 
 #[test]
+fn shares_and_t2_stay_exact_for_tiny_data() {
+    // Near 2^-497 the smallest eigenvalue in data units is subnormal and keeps
+    // only a few bits, but the shares and T² do not depend on the scale.
+    let base = wide_spread();
+    let reference = Pca::fit(&base, 40, 3).unwrap();
+    let tiny: Vec<f64> = base.iter().map(|x| x * 2.0_f64.powi(-497)).collect();
+    let model = Pca::fit(&tiny, 40, 3).unwrap();
+    assert!(model.eigenvalues()[2] < f64::MIN_POSITIVE);
+    // Each share relative to itself: the smallest is 1e-25 of the largest.
+    close_with(
+        model.explained_variance_ratio(),
+        reference.explained_variance_ratio(),
+        0.0,
+        "",
+    );
+    for (sample, original) in tiny.chunks_exact(40).zip(base.chunks_exact(40)) {
+        let t2 = model.project(sample).unwrap().diagnostics.hotelling_t2;
+        let expected = reference
+            .project(original)
+            .unwrap()
+            .diagnostics
+            .hotelling_t2;
+        assert!(
+            (t2 - expected).abs() <= 1e-10 * expected,
+            "{t2} != {expected}"
+        );
+    }
+}
+
+#[test]
 fn rejects_a_total_variance_that_overflows() {
     // Two orthogonal centred columns whose variances are each 0.75 f64::MAX:
     // the kept eigenvalue fits, the total does not, and the explained share

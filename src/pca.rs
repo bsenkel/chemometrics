@@ -69,13 +69,17 @@ pub struct Pca {
     samples: usize,
     variables: usize,
     components: usize,
-    scale: numeric::Scale,
     mean: Vec<f64>,
     loadings: Vec<f64>,
     scores: Vec<f64>,
     eigenvalues: Vec<f64>,
     ratios: Vec<f64>,
     total_variance: f64,
+    /// Power-of-two scale of the training data.
+    scale: numeric::Scale,
+    /// Score standard deviations in scaled units, which stay precise where the
+    /// eigenvalues in data units have become subnormal.
+    deviations: Vec<f64>,
 }
 
 /// Number of samples in a row-major slice, or a shape error.
@@ -162,16 +166,16 @@ impl Pca {
         if svd.values.iter().any(|s| *s <= threshold) {
             return Err(Error::NumericalFailure);
         }
-        let total_variance = scale.restore_squared(variance);
+        // Shares and T² do not depend on the scale, so they are taken from the
+        // scaled values, which keep full precision for any data magnitude.
         let mut eigenvalues = numeric::zeros(components)?;
         let mut ratios = numeric::zeros(components)?;
-        for ((eigenvalue, ratio), value) in eigenvalues
-            .iter_mut()
-            .zip(ratios.iter_mut())
-            .zip(&svd.values)
-        {
-            *eigenvalue = scale.restore_squared(value * value / degrees);
-            *ratio = *eigenvalue / total_variance;
+        let mut deviations = numeric::zeros(components)?;
+        for (a, value) in svd.values.iter().enumerate() {
+            let scaled = value * value / degrees;
+            eigenvalues[a] = scale.restore_squared(scaled);
+            ratios[a] = scaled / variance;
+            deviations[a] = scaled.sqrt();
         }
         // The product is bounded by the data length, so it cannot overflow.
         let mut scores = numeric::zeros(samples * components)?;
@@ -190,13 +194,14 @@ impl Pca {
             samples,
             variables,
             components,
-            scale,
             mean,
             loadings: svd.right,
             scores,
             eigenvalues,
             ratios,
-            total_variance,
+            total_variance: scale.restore_squared(variance),
+            scale,
+            deviations,
         };
         model.orient();
         model.usable()?;
@@ -322,11 +327,11 @@ impl Pca {
         for score in scores.iter_mut() {
             *score = self.scale.restore(*score);
         }
-        // T² is scale invariant; dividing by the square root of the variance
-        // keeps large scores representable.
+        // T² is scale invariant, so scores and deviations are compared in the
+        // scaled units of the training data.
         let hotelling_t2 =
-            numeric::sum(scores.iter().zip(&self.eigenvalues).map(|(t, variance)| {
-                let ratio = t / variance.sqrt();
+            numeric::sum(scores.iter().zip(&self.deviations).map(|(t, deviation)| {
+                let ratio = self.scale.divide(*t) / deviation;
                 ratio * ratio
             }));
         let diagnostics = Diagnostics {
@@ -400,13 +405,14 @@ mod tests {
             samples: 2,
             variables: 2,
             components: 1,
-            scale: numeric::Scale::new(&[1.0]),
             mean: vec![0.0; 2],
             loadings: vec![-0.5, 0.5],
             scores: vec![1.0, -1.0],
             eigenvalues: vec![1.0],
             ratios: vec![1.0],
             total_variance: 1.0,
+            scale: numeric::Scale::new(&[1.0]),
+            deviations: vec![1.0],
         };
         model.orient();
         assert_eq!(model.loadings, [0.5, -0.5]);
