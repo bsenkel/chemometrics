@@ -94,12 +94,15 @@ impl Pca {
     /// # Errors
     /// Checks the data shape, then the sample count, then the component count,
     /// then non-finite values, in that order. Returns
-    /// [`Error::NumericalFailure`] if a requested component is numerically
-    /// indistinguishable from zero, so its direction would be arbitrary, or if
-    /// the variances of such large or small values overflow or underflow.
-    /// Returns [`Error::AllocationFailure`] if the model or the working memory
-    /// cannot be reserved; allocations inside the decomposition's matrix
-    /// kernels may still abort on failure.
+    /// [`Error::NumericalFailure`] if a requested component is not
+    /// distinguishable from rounding in the data, so its direction would be
+    /// arbitrary, or if the variances of such large or small values overflow or
+    /// underflow. A singular value counts as rounding at or below
+    /// `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the norm of the
+    /// uncentred data, since centring cannot remove rounding smaller than the
+    /// values themselves. Returns [`Error::AllocationFailure`] if the model or
+    /// the working memory cannot be reserved; allocations inside the
+    /// decomposition's matrix kernels may still abort on failure.
     ///
     /// # Example
     /// ```
@@ -132,6 +135,13 @@ impl Pca {
         // overflow while forming the column means.
         let scale = numeric::Scale::new(data);
         let mut centered = numeric::zeros(data.len())?;
+        // Centring leaves rounding of the order of EPSILON times the uncentred
+        // values, which a tolerance relative to the centred data cannot see.
+        let uncentred_norm = numeric::sum(data.iter().map(|x| {
+            let x = scale.divide(*x);
+            x * x
+        }))
+        .sqrt();
         for (value, x) in centered.iter_mut().zip(data) {
             *value = scale.divide(*x);
         }
@@ -148,7 +158,7 @@ impl Pca {
         let degrees = (samples - 1) as f64;
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
-        let threshold = f64::EPSILON * samples.max(variables) as f64 * svd.values[0];
+        let threshold = f64::EPSILON * samples.max(variables) as f64 * uncentred_norm;
         if svd.values.iter().any(|s| *s <= threshold) {
             return Err(Error::NumericalFailure);
         }

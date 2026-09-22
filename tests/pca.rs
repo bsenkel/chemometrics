@@ -485,6 +485,50 @@ fn fit_ignores_faer_global_parallelism() {
 }
 
 #[test]
+fn rejects_components_made_of_rounding() {
+    // The mean of this constant is not exactly representable, so centring
+    // leaves rounding instead of zeros.
+    assert_eq!(
+        Pca::fit(&[1.4673634523923815; 3], 1, 1).unwrap_err(),
+        Error::NumericalFailure
+    );
+    // One direction of variation on a growing offset: a second component
+    // could only be rounding.
+    for offset in [0.0, 1e3, 1e6, 1e9] {
+        let data: Vec<f64> = (0..5)
+            .flat_map(|i| [0.1, 0.3, 0.7].map(|v| offset + 0.1 * i as f64 * v))
+            .collect();
+        assert!(Pca::fit(&data, 3, 1).is_ok(), "offset {offset}");
+        assert_eq!(
+            Pca::fit(&data, 3, 2).unwrap_err(),
+            Error::NumericalFailure,
+            "offset {offset}"
+        );
+    }
+}
+
+#[test]
+fn keeps_small_real_components_on_a_large_offset() {
+    // Two uncorrelated directions, the second a million times weaker, so its
+    // variance is 3e-13 of the first. Even on an offset of 1e6 it spans about
+    // ten thousand units of rounding and must be kept.
+    let first = [-3.0, -1.0, 1.0, 3.0];
+    let second = [1.0, -1.0, -1.0, 1.0];
+    let expected = (4.0 / 3.0 * 1e-12) / (20.0 / 3.0);
+    for offset in [0.0, 1e3, 1e6] {
+        let data: Vec<f64> = (0..4)
+            .flat_map(|i| [offset + first[i], offset + 1e-6 * second[i], offset])
+            .collect();
+        let model = Pca::fit(&data, 3, 2).unwrap();
+        let ratio = model.eigenvalues()[1] / model.eigenvalues()[0];
+        assert!(
+            (ratio - expected).abs() <= 1e-3 * expected,
+            "offset {offset}: {ratio:e}"
+        );
+    }
+}
+
+#[test]
 fn handles_extreme_magnitudes() {
     let base = mixtures(6);
     let model = Pca::fit(&base, 101, 2).unwrap();
