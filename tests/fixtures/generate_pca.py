@@ -26,9 +26,15 @@ def encode(values):
 
 
 def signs(loadings):
-    """Signs that make the largest-magnitude loading of each component positive."""
-    extreme = loadings[np.arange(len(loadings)), np.argmax(np.abs(loadings), axis=1)]
-    return np.where(extreme < 0.0, -1.0, 1.0)
+    """Signs that make the largest-magnitude loading of each component positive.
+
+    Loadings within a relative sqrt(eps) of the largest count as tied and the
+    first of them decides, as in the crate.
+    """
+    magnitude = np.abs(loadings)
+    tied = magnitude >= magnitude.max(axis=1, keepdims=True) * (1.0 - np.sqrt(np.finfo(np.float64).eps))
+    leading = loadings[np.arange(len(loadings)), np.argmax(tied, axis=1)]
+    return np.where(leading < 0.0, -1.0, 1.0)
 
 
 def add_case(data, components, spectra):

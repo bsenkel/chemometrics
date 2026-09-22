@@ -231,9 +231,12 @@ impl Pca {
     /// All loading vectors, `components` × `variables` row-major.
     ///
     /// The loadings are orthonormal. The sign of a component is fixed so that
-    /// its largest-magnitude loading is positive; the first such variable wins
-    /// a tie. Components with nearly equal eigenvalues are not determined by
-    /// the data and may differ between platforms or library versions.
+    /// its largest-magnitude loading is positive. Loadings within a relative
+    /// `√ε` (about 1.5e-8) of the largest count as equally large and the first
+    /// of them decides, so rounding cannot flip a component whose largest
+    /// loadings are equal in magnitude. Components with nearly equal
+    /// eigenvalues are not determined by the data and may differ between
+    /// platforms or library versions.
     pub fn loadings(&self) -> &[f64] {
         &self.loadings
     }
@@ -355,14 +358,12 @@ impl Pca {
             ..
         } = self;
         for (a, loading) in loadings.chunks_exact_mut(*variables).enumerate() {
-            let extreme = loading.iter().fold(0.0_f64, |best, value| {
-                if value.abs() > best.abs() {
-                    *value
-                } else {
-                    best
-                }
-            });
-            if extreme >= 0.0 {
+            let largest = loading.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+            // Loadings equal in magnitude up to rounding count as tied, and the
+            // first of them decides.
+            let bound = largest * (1.0 - f64::EPSILON.sqrt());
+            let leading = loading.iter().find(|v| v.abs() >= bound).copied();
+            if leading.is_none_or(|v| v >= 0.0) {
                 continue;
             }
             for value in loading.iter_mut() {

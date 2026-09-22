@@ -239,10 +239,9 @@ fn component_signs_are_deterministic() {
     let model = Pca::fit(&data, 101, 3).unwrap();
     for a in 0..model.components() {
         let loading = model.loading(a).unwrap();
-        let extreme = loading
-            .iter()
-            .fold(0.0_f64, |a, b| if b.abs() > a.abs() { *b } else { a });
-        assert!(extreme > 0.0, "component {a}: {extreme}");
+        let bound = largest(loading) * (1.0 - f64::EPSILON.sqrt());
+        let leading = loading.iter().find(|v| v.abs() >= bound).unwrap();
+        assert!(*leading > 0.0, "component {a}: {leading}");
     }
     // Negating the data keeps the loadings and negates the scores.
     let negated: Vec<f64> = data.iter().map(|x| -x).collect();
@@ -482,6 +481,38 @@ fn fit_ignores_faer_global_parallelism() {
     // one thread regardless. Before, this setting made the fit panic.
     faer::disable_global_parallelism();
     assert!(Pca::fit(&mixtures(6), 101, 2).is_ok());
+}
+
+#[test]
+fn rounding_cannot_flip_a_component() {
+    // The loadings of the single component are ±1/√2, which rounding turns
+    // into magnitudes that differ in the last bit, differently for each data
+    // set.
+    let data = |factor: f64, offset: f64| -> Vec<f64> {
+        (0..7)
+            .flat_map(|i| {
+                let t = 0.37 * i as f64 - 1.1;
+                [factor * t + offset, -factor * t + offset]
+            })
+            .collect()
+    };
+    let reference = Pca::fit(&data(1.0, 0.0), 2, 1).unwrap();
+    assert!(reference.loadings()[0] > 0.0);
+    for (factor, offset) in [
+        (3.0, 0.0),
+        (1.0 / 3.0, 0.0),
+        (11.0, 0.0),
+        (13.0, 0.0),
+        (1.0, 10.0),
+    ] {
+        let model = Pca::fit(&data(factor, offset), 2, 1).unwrap();
+        close(model.loadings(), reference.loadings());
+        assert_eq!(
+            model.scores()[0].signum(),
+            reference.scores()[0].signum(),
+            "factor {factor}, offset {offset}"
+        );
+    }
 }
 
 #[test]
