@@ -529,6 +529,33 @@ fn keeps_small_real_components_on_a_large_offset() {
 }
 
 #[test]
+fn q_is_exact_far_from_the_training_magnitude() {
+    // The model varies along the first variable only, so a spectrum at the
+    // mean with a value in the second variable has exactly that value's
+    // square as Q, whatever the magnitudes of the mean and the value.
+    for (factor, off_plane) in [
+        (2.0_f64.powi(-500), 1e5),
+        (1e-100, 1e55),
+        (1e100, 1e-70),
+        (1.0, 1e-140),
+        (1.0, 1e140),
+    ] {
+        let data: Vec<f64> = [1.0, 2.0, 3.5, 5.0]
+            .iter()
+            .flat_map(|x| [x * factor, 0.0])
+            .collect();
+        let model = Pca::fit(&data, 2, 1).unwrap();
+        let projection = model.project(&[model.mean()[0], off_plane]).unwrap();
+        let expected = off_plane * off_plane;
+        let q = projection.diagnostics.q_residual;
+        assert!(
+            (q - expected).abs() <= 1e-12 * expected,
+            "factor {factor:e}, value {off_plane:e}: {q:e}"
+        );
+    }
+}
+
+#[test]
 fn handles_extreme_magnitudes() {
     let base = mixtures(6);
     let model = Pca::fit(&base, 101, 2).unwrap();

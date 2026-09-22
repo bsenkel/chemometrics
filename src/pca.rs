@@ -309,24 +309,22 @@ impl Pca {
         if let Some(index) = spectrum.iter().position(|x| !x.is_finite()) {
             return Err(Error::NonFiniteInput { index });
         }
-        // Both terms are scaled separately, so their difference stays finite
-        // even for spectra near f64::MAX.
-        let centered = |(x, m): (&f64, &f64)| self.scale.divide(*x) - self.scale.divide(*m);
-        let centered_spectrum = || spectrum.iter().zip(&self.mean).map(centered);
+        // No scaling here: the spectrum may differ from the training data by
+        // any factor, and the differences overflow or underflow only where
+        // the scores or Q do.
+        let centered = || spectrum.iter().zip(&self.mean).map(|(x, m)| x - m);
         let loadings = || self.loadings.chunks_exact(self.variables);
         for (score, loading) in scores.iter_mut().zip(loadings()) {
-            *score = numeric::sum(centered_spectrum().zip(loading).map(|(d, p)| d * p));
+            *score = numeric::sum(centered().zip(loading).map(|(d, p)| d * p));
         }
-        let unscaled: &[f64] = scores;
+        let scores: &[f64] = scores;
         // The residual is formed directly; ‖x−x̄‖² − ‖t‖² would cancel.
-        let q_residual = numeric::sum(centered_spectrum().enumerate().map(|(j, d)| {
-            let fitted = numeric::sum(loadings().zip(unscaled).map(|(p, t)| t * p[j]));
-            let residual = d - fitted;
-            residual * residual
-        }));
-        for score in scores.iter_mut() {
-            *score = self.scale.restore(*score);
-        }
+        let residuals = || {
+            centered()
+                .enumerate()
+                .map(|(j, d)| d - numeric::sum(loadings().zip(scores).map(|(p, t)| t * p[j])))
+        };
+        let q_residual = numeric::sum(residuals().map(|r| r * r));
         // T² is scale invariant, so scores and deviations are compared in the
         // scaled units of the training data.
         let hotelling_t2 =
@@ -336,7 +334,7 @@ impl Pca {
             }));
         let diagnostics = Diagnostics {
             hotelling_t2,
-            q_residual: self.scale.restore_squared(q_residual),
+            q_residual,
         };
         if !diagnostics.hotelling_t2.is_finite()
             || !diagnostics.q_residual.is_finite()
