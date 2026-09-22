@@ -8,6 +8,7 @@
 //! [`Pca::project`] places a further spectrum in the model and reports
 //! Hotelling's T² and the Q residual, the two standard outlier statistics.
 use crate::{Error, numeric};
+use std::fmt;
 
 /// Distance of one spectrum from the centre of the model and from its plane.
 ///
@@ -65,7 +66,7 @@ pub struct Projection {
 /// assert!(projection.diagnostics.q_residual < 1e-20);
 /// # Ok::<(), chemometrics::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Pca {
     samples: usize,
     variables: usize,
@@ -81,6 +82,17 @@ pub struct Pca {
     /// Score standard deviations in scaled units, which stay precise where the
     /// eigenvalues in data units have become subnormal.
     deviations: Vec<f64>,
+}
+
+impl fmt::Debug for Pca {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Pca")
+            .field("samples", &self.samples)
+            .field("variables", &self.variables)
+            .field("components", &self.components)
+            .field("eigenvalues", &self.eigenvalues)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Number of samples in a row-major slice, or a shape error.

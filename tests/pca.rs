@@ -666,6 +666,17 @@ fn shares_and_t2_stay_exact_for_tiny_data() {
 }
 
 #[test]
+fn debug_shows_the_shape_not_the_buffers() {
+    let model = Pca::fit(&mixtures(12), 101, 2).unwrap();
+    let text = format!("{model:?}");
+    assert!(
+        text.contains("samples: 12") && text.contains("components: 2"),
+        "{text}"
+    );
+    assert!(text.len() < 200, "{} characters", text.len());
+}
+
+#[test]
 fn rejects_a_total_variance_that_overflows() {
     // Two orthogonal centred columns whose variances are each 0.75 f64::MAX:
     // the kept eigenvalue fits, the total does not, and the explained share
