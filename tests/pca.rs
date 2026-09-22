@@ -143,6 +143,116 @@ fn scores_carry_the_component_variance() {
 }
 
 #[test]
+fn training_q_sums_to_the_discarded_variance() {
+    // Σ Q over the training samples is the squared norm of the discarded part
+    // of the centred data, (n − 1) times the sum of the discarded eigenvalues.
+    // The data has rank six, so every count here discards real variation.
+    let data = mixtures(14);
+    for components in [1, 2, 3, 5] {
+        let model = Pca::fit(&data, 101, components).unwrap();
+        let actual: f64 = data
+            .chunks_exact(101)
+            .map(|sample| model.project(sample).unwrap().diagnostics.q_residual)
+            .sum();
+        let discarded: f64 = model.all_eigenvalues()[components..].iter().sum();
+        let expected = 13.0 * discarded;
+        assert!(
+            (actual - expected).abs() <= 1e-9 * expected,
+            "{components} components: {actual} != {expected}"
+        );
+        let rest = model.total_variance() - model.eigenvalues().iter().sum::<f64>();
+        assert!(
+            (discarded - rest).abs() <= 1e-9 * model.total_variance(),
+            "{components} components: {discarded} != {rest}"
+        );
+    }
+}
+
+#[test]
+fn all_eigenvalues_cover_the_total_variance() {
+    // Tall and wide data: at most min(samples − 1, variables) directions vary.
+    for (samples, variables, components) in [(20, 5, 2), (6, 30, 1), (6, 30, 5)] {
+        let data = pseudo_random(samples * variables, 5);
+        let model = Pca::fit(&data, variables, components).unwrap();
+        let all = model.all_eigenvalues();
+        assert_eq!(all.len(), (samples - 1).min(variables));
+        assert_eq!(&all[..components], model.eigenvalues());
+        assert!(all.windows(2).all(|w| w[0] >= w[1]), "{all:?}");
+        let sum: f64 = all.iter().sum();
+        let total = model.total_variance();
+        assert!((sum - total).abs() <= 1e-12 * total, "{sum} != {total}");
+    }
+}
+
+#[test]
+fn all_eigenvalues_show_the_supported_components() {
+    // Forty spectra of twelve variables, each centred on its own mean as SNV
+    // does, so one direction is removed and eleven components remain.
+    let data: Vec<f64> = pseudo_random(40 * 12, 13)
+        .chunks_exact(12)
+        .flat_map(|row| {
+            let mean = row.iter().sum::<f64>() / 12.0;
+            row.iter().map(move |x| x - mean)
+        })
+        .collect();
+    assert_eq!(
+        Pca::fit(&data, 12, 12).unwrap_err(),
+        Error::NumericalFailure
+    );
+    let model = Pca::fit(&data, 12, 1).unwrap();
+    let all = model.all_eigenvalues();
+    assert_eq!(all.len(), 12);
+    assert!(all[10] > 1e-3 * all[0], "{all:?}");
+    assert!(all[11] < 1e-20 * all[0], "{all:?}");
+    assert!(Pca::fit(&data, 12, 11).is_ok());
+}
+
+#[test]
+fn diagnostics_do_not_depend_on_rotations_within_equal_components() {
+    // The first two directions carry equal or nearly equal variance, so their
+    // loadings may be any rotation within their plane, but the plane itself,
+    // and with it Q and T², is determined by the gap to the third direction.
+    // The directions are the orthonormal columns of a 4 × 4 Hadamard matrix
+    // divided by two, so every expected value is exact.
+    let hadamard = [
+        [0.5, 0.5, 0.5, 0.5],
+        [0.5, -0.5, 0.5, -0.5],
+        [0.5, 0.5, -0.5, -0.5],
+        [0.5, -0.5, -0.5, 0.5],
+    ];
+    let spectrum = |coordinates: [f64; 4]| -> Vec<f64> {
+        (0..4)
+            .map(|j| (0..4).map(|a| hadamard[j][a] * coordinates[a]).sum())
+            .collect()
+    };
+    let first = [1.0, 1.0, 1.0, 1.0, -1.0, -1.0, -1.0, -1.0];
+    let second = [1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0];
+    let third = [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0];
+    for spread in [1.0, 1.0 + 1e-9] {
+        let data: Vec<f64> = (0..8)
+            .flat_map(|i| spectrum([first[i], spread * second[i], 0.1 * third[i], 0.0]))
+            .collect();
+        let model = Pca::fit(&data, 4, 2).unwrap();
+        let variance = 8.0 / 7.0;
+        close(model.eigenvalues(), &[variance * spread * spread, variance]);
+        let (u, v, w, z) = (0.7, -1.3, 0.4, -0.2);
+        let diagnostics = model.project(&spectrum([u, v, w, z])).unwrap().diagnostics;
+        let q = w * w + z * z;
+        assert!(
+            (diagnostics.q_residual - q).abs() <= 1e-12 * q,
+            "spread {spread}: {diagnostics:?}"
+        );
+        // Unequal variances make T² depend on the rotation by about their
+        // relative difference.
+        let t2 = (u * u + v * v) / variance;
+        assert!(
+            (diagnostics.hotelling_t2 - t2).abs() <= 1e-8 * t2,
+            "spread {spread}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
 fn every_component_describes_the_data_completely() {
     // Six samples of four variables: four components span the centred data.
     let data = pseudo_random(24, 7);
