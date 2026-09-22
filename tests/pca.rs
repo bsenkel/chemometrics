@@ -798,6 +798,25 @@ fn numpy_reference() {
                 );
                 projections += 1;
             }
+            "all" => {
+                let model = model.as_ref().expect("case header");
+                let expected = values(&mut parts);
+                assert_eq!(
+                    model.all_eigenvalues().len(),
+                    expected.len(),
+                    "length{context}"
+                );
+                // Perturbing the data by `precision` moves each singular value
+                // by at most `precision` times the largest (Weyl), so each
+                // eigenvalue by about 2 precision √(λ λ_max). A floor relative
+                // to the largest alone would barely check the small ones that
+                // Q limits depend on.
+                let top = largest(&expected);
+                for (i, (&a, &b)) in model.all_eigenvalues().iter().zip(&expected).enumerate() {
+                    let floor = 2.0 * precision * (b * top).sqrt() + precision * precision * top;
+                    close_with(&[a], &[b], floor, format!(" of eigenvalue {i}{context}"));
+                }
+            }
             other => {
                 let model = model.as_ref().expect("case header");
                 let expected = values(&mut parts);

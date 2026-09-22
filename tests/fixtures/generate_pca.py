@@ -13,7 +13,7 @@ assert np.__version__ == "2.5.2"
 assert sklearn.__version__ == "1.9.1"
 rows = [
     f"# numpy {np.__version__}; checked against scikit-learn {sklearn.__version__} PCA(svd_solver='full')",
-    "# case|samples|variables|components|data, then mean, eigenvalues, ratios, loadings,",
+    "# case|samples|variables|components|data, then mean, eigenvalues, all eigenvalues, ratios, loadings,",
     "# scores and one project line per spectrum: project|spectrum|scores|t2|q",
 ]
 # Loadings and scores of a component are only determined as far as the gap to
@@ -50,6 +50,9 @@ def add_case(data, components, spectra):
     assert gaps[:components].min() > MINIMUM_GAP, gaps
     eigenvalues = singular**2 / (samples - 1)
     total = eigenvalues.sum()
+    # Centring removes one direction, so at most samples - 1 are variation.
+    every = eigenvalues[:min(samples - 1, variables)]
+    assert np.isclose(every.sum(), total, rtol=1e-12)
     sign = signs(vt[:components])
     loadings = sign[:, None] * vt[:components]
     scores = sign * (u * singular)[:, :components]
@@ -70,6 +73,7 @@ def add_case(data, components, spectra):
         f"case|{samples}|{variables}|{components}|{encode(data)}",
         f"mean|{encode(mean)}",
         f"eigenvalues|{encode(eigenvalues[:components])}",
+        f"all|{encode(every)}",
         f"ratios|{encode(ratios)}",
         f"loadings|{encode(loadings)}",
         f"scores|{encode(scores)}",
@@ -84,7 +88,7 @@ def add_case(data, components, spectra):
         for values in (projected, [t2, q]):
             assert np.isfinite(values).all()
         lines.append(f"project|{encode(spectrum)}|{encode(projected)}|{encode([t2])}|{encode([q])}")
-    for values in (mean, eigenvalues[:components], ratios, loadings, scores):
+    for values in (mean, every, ratios, loadings, scores):
         assert np.isfinite(values).all()
     rows.extend(lines)
 
