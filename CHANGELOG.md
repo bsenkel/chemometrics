@@ -10,8 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `pca::Pca` behind the optional `pca` feature: principal component analysis of
-  a set of spectra with Hotelling T² and Q residual outlier statistics,
-  validated against analytic results and NumPy/scikit-learn references.
+  a set of spectra with Hotelling T² and Q residual outlier statistics and the
+  eigenvalues of all components for Q control limits and choosing the number of
+  components, validated against analytic results and NumPy/scikit-learn
+  references.
 - `Error::InvalidDataShape`, `Error::InvalidSpectrumLength` and
   `Error::InvalidComponentCount`.
 

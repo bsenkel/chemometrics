@@ -122,7 +122,7 @@ matrix decomposition and therefore a dependency:
 
 ```toml
 [dependencies]
-chemometrics = { version = "0.1", features = ["pca"] }
+chemometrics = { version = "0.2", features = ["pca"] }
 ```
 
 ```rust,ignore
@@ -163,6 +163,12 @@ carries variation the model does not describe, such as an unexpected band.
 `project_into` writes the scores into a caller-owned buffer without allocating.
 Control limits are not computed; their formulas are documented on the
 `Diagnostics` fields.
+
+`all_eigenvalues` returns the eigenvalues of every component the data allows,
+the retained ones first. The discarded ones give the Jackson–Mudholkar limit for
+Q, and divided by `total_variance` they show how many components the data
+supports, even where fitting that many fails because preprocessing such as SNV
+or detrending removed directions from the data.
 
 Eigenvalues are score variances with divisor `samples - 1`, and
 `explained_variance_ratio` divides them by the total variance of the centered
@@ -246,7 +252,7 @@ can pass intensities read by `spc-spectra` directly to these filters.
 Additional preprocessing can add slice-based modules. Matrix dependencies stay
 optional and internal, as `pca` shows, so the preprocessing API is unaffected by
 them. f32, no_std, irregular sampling, alternate edge modes, in-place filtering
-and parallel processing are outside version 0.1.
+and parallel processing are outside version 0.2.
 
 ## Numerical validation
 
@@ -297,5 +303,6 @@ NIR-like mixtures after SNV, each with clearly separated eigenvalues, since
 loadings of nearly equal eigenvalues are not determined. Regenerate with
 `uv run tests/fixtures/generate_pca.py`. Analytic tests also verify orthonormal
 loadings, score variances, invariance under offsets, scaling and sample order,
-the sign convention, the mean of T² over the training set, and the separation of
-T² and Q outliers.
+the sign convention, the mean of T² and the sum of Q over the training set, T²
+and Q for components of equal variance, whose loadings are not determined, and
+the separation of T² and Q outliers.
