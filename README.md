@@ -148,12 +148,15 @@ the feature; the module documentation carries the tested version.
 
 
 A set of spectra is one flat row-major slice plus the number of variables per
-sample, which is the layout of a NumPy array or an `ndarray` row-major view, so
-no matrix type appears in the API. `Pca::fit` mean-centers the data and keeps
-the requested number of components, at most `min(samples - 1, variables)`.
-`fit` does not scale individual variables: spectral variables share one unit,
-and autoscaling would amplify noise-only wavelengths. Autoscaling for other data
-is planned as a separate method.
+sample, which is the layout of a C-ordered NumPy array or an `ndarray` row-major
+view, so no matrix type appears in the API. Column-major matrices, such as
+nalgebra's `DMatrix` or Fortran-ordered NumPy arrays, must be transposed first:
+their slice has the same length, so the mistake cannot be detected and gives a
+meaningless model. `Pca::fit` mean-centers the data and keeps the requested
+number of components, at most `min(samples - 1, variables)`. `fit` does not
+scale individual variables: spectral variables share one unit, and autoscaling
+would amplify noise-only wavelengths. Autoscaling for other data is planned as
+a separate method.
 
 `Pca::project` places a further spectrum in the model and returns its scores
 together with Hotelling's T², the squared distance inside the component plane,

@@ -81,7 +81,7 @@ pub enum Error {
     },
     /// Input contains NaN or infinity.
     NonFiniteInput {
-        /// Index of the first non-finite sample.
+        /// Index of the first non-finite value in the input slice.
         index: usize,
     },
     /// A polynomial fit is numerically rank deficient, a scaling or a result

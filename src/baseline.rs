@@ -81,6 +81,7 @@ impl Detrend {
 
     /// Corrects a spectrum into a newly allocated vector.
     ///
+    /// # Errors
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {

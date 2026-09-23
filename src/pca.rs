@@ -1,10 +1,14 @@
 //! Principal component analysis of a set of spectra, with outlier statistics.
 //!
 //! Spectra are passed as one flat row-major slice: row `i` holds the
-//! `variables` intensities of sample `i`. The model mean-centers the data and
-//! keeps the leading components. [`Pca::fit`] does not scale individual
-//! variables, because spectral variables share one unit and autoscaling would
-//! amplify noise; autoscaling for other data is planned as a separate method.
+//! `variables` intensities of sample `i`. Column-major matrices, such as
+//! nalgebra's `DMatrix`, must be transposed first; a slice of the same length
+//! in the wrong order cannot be detected and gives a meaningless model.
+//!
+//! The model mean-centers the data and keeps the leading components.
+//! [`Pca::fit`] does not scale individual variables, because spectral
+//! variables share one unit and autoscaling would amplify noise; autoscaling
+//! for other data is planned as a separate method.
 //!
 //! [`Pca::project`] places a further spectrum in the model and reports
 //! Hotelling's T² and the Q residual, the two standard outlier statistics.
@@ -33,7 +37,7 @@
 use crate::{Error, numeric};
 use std::fmt;
 
-/// Distance of one spectrum from the centre of the model and from its plane.
+/// Distance of one spectrum from the center of the model and from its plane.
 ///
 /// Both statistics are needed: T² finds a spectrum that is extreme in known
 /// directions, Q finds one that carries variation the model does not describe.
@@ -70,7 +74,7 @@ pub struct Projection {
 ///
 /// Fitting takes O(samples × variables × min(samples, variables)) time and runs
 /// on a single thread. At its peak it holds a few times the size of the data:
-/// the centred copy, the decomposition's working copies and its factors. The
+/// the centered copy, the decomposition's working copies and its factors. The
 /// model keeps the mean, the loadings, the training scores and the variances,
 /// but not the data. `Debug` prints the shape and the eigenvalues only, since
 /// the buffers can hold millions of values.
@@ -138,17 +142,19 @@ impl Pca {
     ///
     /// # Errors
     /// Checks the data shape, then the number of spectra, then the component
-    /// count, then non-finite values, in that order. Returns
-    /// [`Error::InsufficientRank`], with the number of components the data
-    /// support, if a requested component is not distinguishable from rounding,
-    /// so its direction would be arbitrary. A singular value counts as rounding
-    /// at or below `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the
-    /// norm of the uncentred data, since centring cannot remove rounding
-    /// smaller than the values themselves. Returns [`Error::NumericalFailure`]
-    /// if the variances of very large or very small data overflow or
-    /// underflow, and [`Error::AllocationFailure`] if the model or the working
-    /// memory cannot be reserved; allocations inside the decomposition's
-    /// matrix kernels may still abort on failure.
+    /// count, then non-finite values, in that order; the index in
+    /// [`Error::NonFiniteInput`] refers to `data`, so the affected spectrum is
+    /// `index / variables`. Returns [`Error::InsufficientRank`], with the
+    /// number of components the data support, if a requested component is not
+    /// distinguishable from rounding, so its direction would be arbitrary. A
+    /// singular value counts as rounding at or below
+    /// `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the norm of the
+    /// uncentered data, since centering cannot remove rounding smaller than the
+    /// values themselves. Returns [`Error::NumericalFailure`] if the variances
+    /// of very large or very small data overflow or underflow, and
+    /// [`Error::AllocationFailure`] if the model or the working memory cannot
+    /// be reserved; allocations inside the decomposition's matrix kernels may
+    /// still abort on failure.
     ///
     /// # Example
     /// ```
@@ -177,12 +183,13 @@ impl Pca {
         if let Some(index) = data.iter().position(|x| !x.is_finite()) {
             return Err(Error::NonFiniteInput { index });
         }
-        // Scale before centring: sums of values near f64::MAX would otherwise
+        // Scale before centering: sums of values near f64::MAX would otherwise
         // overflow while forming the column means.
         let scale = numeric::Scale::new(data);
         let mut centered = numeric::zeros(data.len())?;
-        // Centring leaves rounding of the order of EPSILON times the uncentred
-        // values, which a tolerance relative to the centred data cannot see.
+        // Centering leaves rounding of the order of EPSILON times the
+        // uncentered values, which a tolerance relative to the centered data
+        // cannot see.
         let uncentred_norm = numeric::sum(data.iter().map(|x| {
             let x = scale.divide(*x);
             x * x
@@ -331,14 +338,14 @@ impl Pca {
 
     /// Share of the total variance carried by each component.
     ///
-    /// The total is the variance of the centred data over all variables, not
+    /// The total is the variance of the centered data over all variables, not
     /// only the part the retained components cover, so the shares sum to one,
     /// up to rounding, when every component is retained.
     pub fn explained_variance_ratio(&self) -> &[f64] {
         &self.ratios
     }
 
-    /// Total variance of the centred training data.
+    /// Total variance of the centered training data.
     pub fn total_variance(&self) -> f64 {
         self.total_variance
     }

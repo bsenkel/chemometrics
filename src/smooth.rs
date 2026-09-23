@@ -78,6 +78,9 @@ pub struct MovingAverage {
 
 impl MovingAverage {
     /// Creates a filter with a positive odd window length.
+    ///
+    /// # Errors
+    /// Returns [`Error::InvalidWindowLength`] for a zero or even window length.
     pub fn new(window_length: usize) -> Result<Self, Error> {
         window_valid(window_length)?;
         Ok(Self { window_length })
@@ -85,7 +88,9 @@ impl MovingAverage {
 
     /// Filters a signal into a newly allocated vector.
     ///
+    /// # Errors
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
+    /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
         validate(input, input.len(), self.window_length)?;
         let mut output = numeric::zeros(input.len())?;
@@ -96,7 +101,13 @@ impl MovingAverage {
     /// Filters into a same-length buffer without allocating.
     ///
     /// Invalid inputs leave the buffer unchanged. Numerical failure can leave
-    /// a partially written buffer. NaN and infinity inputs are rejected.
+    /// a partially written buffer.
+    ///
+    /// # Errors
+    /// Returns [`Error::SignalTooShort`] for a signal shorter than the window,
+    /// [`Error::OutputLengthMismatch`] for a buffer of different length and
+    /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
+    /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         validate(input, output.len(), self.window_length)?;
         self.filter(input, output)
@@ -149,9 +160,13 @@ pub struct SavitzkyGolay {
 impl SavitzkyGolay {
     /// Prepares a filter. The polynomial order must be below the window length.
     ///
-    /// Returns a numerical error if the polynomial fit is rank deficient, or
-    /// [`Error::AllocationFailure`] if buffer sizes exceed addressable capacity
-    /// or the allocator cannot reserve the requested memory.
+    /// # Errors
+    /// Returns [`Error::InvalidWindowLength`] or
+    /// [`Error::InvalidPolynomialOrder`] for invalid parameters, checked in
+    /// that order, and [`Error::NumericalFailure`] if the polynomial fit is
+    /// rank deficient. Returns [`Error::AllocationFailure`] if buffer sizes
+    /// exceed addressable capacity or the allocator cannot reserve the
+    /// requested memory.
     pub fn new(window_length: usize, polynomial_order: usize) -> Result<Self, Error> {
         Self::new_derivative(window_length, polynomial_order, 0, 1.0)
     }
@@ -220,7 +235,9 @@ impl SavitzkyGolay {
 
     /// Filters a signal into a newly allocated vector.
     ///
+    /// # Errors
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
+    /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
         validate(input, input.len(), self.window_length)?;
         let mut output = numeric::zeros(input.len())?;
@@ -231,7 +248,13 @@ impl SavitzkyGolay {
     /// Filters into a same-length buffer without allocating.
     ///
     /// Invalid inputs leave the buffer unchanged. Numerical failure can leave
-    /// a partially written buffer. NaN and infinity inputs are rejected.
+    /// a partially written buffer.
+    ///
+    /// # Errors
+    /// Returns [`Error::SignalTooShort`] for a signal shorter than the window,
+    /// [`Error::OutputLengthMismatch`] for a buffer of different length and
+    /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
+    /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         validate(input, output.len(), self.window_length)?;
         self.filter(input, output)
