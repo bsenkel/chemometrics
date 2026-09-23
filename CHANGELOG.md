@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   eigenvalues of all components for Q control limits and choosing the number of
   components, validated against analytic results and NumPy/scikit-learn
   references.
-- `Error::InvalidDataShape`, `Error::InvalidSpectrumLength` and
-  `Error::InvalidComponentCount`.
+- `Error::InvalidDataShape`, `Error::InvalidSpectrumLength`,
+  `Error::InvalidComponentCount` and `Error::InsufficientRank`, which reports
+  how many components the data supports.
 
 ## [0.1.3] - 2026-09-18
 

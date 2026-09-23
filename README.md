@@ -166,9 +166,8 @@ Control limits are not computed; their formulas are documented on the
 
 `all_eigenvalues` returns the eigenvalues of every component the data allows,
 the retained ones first. The discarded ones give the Jackson–Mudholkar limit for
-Q, and divided by `total_variance` they show how many components the data
-supports, even where fitting that many fails because preprocessing such as SNV
-or detrending removed directions from the data.
+Q, and divided by `total_variance` they show how much further components would
+explain, which helps to choose their number.
 
 Eigenvalues are score variances with divisor `samples - 1`, and
 `explained_variance_ratio` divides them by the total variance of the centered
@@ -178,7 +177,9 @@ positive; loadings within a relative √ε of the largest count as equally large
 and the first of them decides, so rounding cannot flip a component and results
 stay reproducible. Components whose eigenvalues are nearly equal are not
 determined by the data. A requested component that cannot be told apart from
-rounding in the uncentered data gives `Error::NumericalFailure`.
+rounding in the uncentered data gives `Error::InsufficientRank`, which reports
+how many components the data supports; preprocessing such as SNV or detrending
+removes directions and can lower that number.
 
 Fitting takes O(samples × variables × min(samples, variables)) time and runs on
 a single thread. At its peak it holds a few times the size of the data: the
