@@ -29,6 +29,13 @@ pub enum Error {
         /// Requested number of variables per sample.
         variables: usize,
     },
+    /// Data contain fewer spectra than the operation requires.
+    TooFewSpectra {
+        /// Actual number of spectra.
+        count: usize,
+        /// Required minimum number of spectra.
+        minimum: usize,
+    },
     /// Spectrum length differs from the number of variables in a model.
     InvalidSpectrumLength {
         /// Required spectrum length.
@@ -58,12 +65,11 @@ pub enum Error {
         /// Required minimum length.
         window_length: usize,
     },
-    /// Input contains fewer samples than the operation requires: values of a
-    /// spectrum for per-spectrum transforms, spectra for principal components.
+    /// Input contains fewer samples than the operation requires.
     TooFewSamples {
-        /// Actual number of samples.
+        /// Actual input length.
         length: usize,
-        /// Required minimum number of samples.
+        /// Required minimum length.
         minimum: usize,
     },
     /// Output length differs from input length.
@@ -106,6 +112,9 @@ impl fmt::Display for Error {
                 f,
                 "data length {length} must be a positive multiple of {variables} variables"
             ),
+            Self::TooFewSpectra { count, minimum } => {
+                write!(f, "at least {minimum} spectra are required, got {count}")
+            }
             Self::InvalidSpectrumLength { expected, actual } => {
                 write!(f, "spectrum length must be {expected}, got {actual}")
             }

@@ -446,8 +446,8 @@ fn rejects_invalid_shapes_and_counts() {
     );
     assert_eq!(
         Pca::fit(&data[..4], 4, 1).unwrap_err(),
-        Error::TooFewSamples {
-            length: 1,
+        Error::TooFewSpectra {
+            count: 1,
             minimum: 2
         }
     );
@@ -481,7 +481,7 @@ fn rejects_invalid_shapes_and_counts() {
 fn checks_inputs_in_order() {
     let mut data = pseudo_random(12, 11);
     data[7] = f64::NAN;
-    // The shape, the sample count and the component count come first.
+    // The shape, the number of spectra and the component count come first.
     assert_eq!(
         Pca::fit(&data, 5, 1).unwrap_err(),
         Error::InvalidDataShape {
@@ -491,8 +491,8 @@ fn checks_inputs_in_order() {
     );
     assert_eq!(
         Pca::fit(&data[..3], 3, 1).unwrap_err(),
-        Error::TooFewSamples {
-            length: 1,
+        Error::TooFewSpectra {
+            count: 1,
             minimum: 2
         }
     );

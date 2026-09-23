@@ -137,8 +137,8 @@ impl Pca {
     /// `components` must be between one and `min(samples − 1, variables)`.
     ///
     /// # Errors
-    /// Checks the data shape, then the sample count, then the component count,
-    /// then non-finite values, in that order. Returns
+    /// Checks the data shape, then the number of spectra, then the component
+    /// count, then non-finite values, in that order. Returns
     /// [`Error::InsufficientRank`], with the number of components the data
     /// support, if a requested component is not distinguishable from rounding,
     /// so its direction would be arbitrary. A singular value counts as rounding
@@ -162,8 +162,8 @@ impl Pca {
     pub fn fit(data: &[f64], variables: usize, components: usize) -> Result<Self, Error> {
         let samples = samples_of(data.len(), variables)?;
         if samples < 2 {
-            return Err(Error::TooFewSamples {
-                length: samples,
+            return Err(Error::TooFewSpectra {
+                count: samples,
                 minimum: 2,
             });
         }
