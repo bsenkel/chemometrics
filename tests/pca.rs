@@ -197,7 +197,10 @@ fn all_eigenvalues_show_the_supported_components() {
         .collect();
     assert_eq!(
         Pca::fit(&data, 12, 12).unwrap_err(),
-        Error::NumericalFailure
+        Error::InsufficientRank {
+            requested: 12,
+            supported: 11
+        }
     );
     let model = Pca::fit(&data, 12, 1).unwrap();
     let all = model.all_eigenvalues();
@@ -548,7 +551,10 @@ fn rejects_rank_deficient_data() {
     let constant = vec![0.5; 30];
     assert_eq!(
         Pca::fit(&constant, 3, 2).unwrap_err(),
-        Error::NumericalFailure
+        Error::InsufficientRank {
+            requested: 2,
+            supported: 0
+        }
     );
     // Two directions of variation cannot support three components.
     let mut data = Vec::new();
@@ -560,7 +566,13 @@ fn rejects_rank_deficient_data() {
         }
     }
     assert!(Pca::fit(&data, 5, 2).is_ok());
-    assert_eq!(Pca::fit(&data, 5, 3).unwrap_err(), Error::NumericalFailure);
+    assert_eq!(
+        Pca::fit(&data, 5, 3).unwrap_err(),
+        Error::InsufficientRank {
+            requested: 3,
+            supported: 2
+        }
+    );
 }
 
 #[test]
@@ -580,7 +592,10 @@ fn rank_tolerance_scales_with_the_matrix_size() {
     };
     assert_eq!(
         Pca::fit(&data(8.0 * f64::EPSILON), 40, 2).unwrap_err(),
-        Error::NumericalFailure
+        Error::InsufficientRank {
+            requested: 2,
+            supported: 1
+        }
     );
     assert!(Pca::fit(&data(1e4 * f64::EPSILON), 40, 2).is_ok());
 }
@@ -631,7 +646,10 @@ fn rejects_components_made_of_rounding() {
     // leaves rounding instead of zeros.
     assert_eq!(
         Pca::fit(&[1.4673634523923815; 3], 1, 1).unwrap_err(),
-        Error::NumericalFailure
+        Error::InsufficientRank {
+            requested: 1,
+            supported: 0
+        }
     );
     // One direction of variation on a growing offset: a second component
     // could only be rounding.
@@ -642,7 +660,10 @@ fn rejects_components_made_of_rounding() {
         assert!(Pca::fit(&data, 3, 1).is_ok(), "offset {offset}");
         assert_eq!(
             Pca::fit(&data, 3, 2).unwrap_err(),
-            Error::NumericalFailure,
+            Error::InsufficientRank {
+                requested: 2,
+                supported: 1
+            },
             "offset {offset}"
         );
     }

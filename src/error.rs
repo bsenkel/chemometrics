@@ -43,6 +43,14 @@ pub enum Error {
         /// Largest supported number of components.
         maximum: usize,
     },
+    /// Data vary in fewer directions than the requested number of components,
+    /// so the remaining ones would be rounding with arbitrary directions.
+    InsufficientRank {
+        /// Requested number of components.
+        requested: usize,
+        /// Number of components that stand out from rounding.
+        supported: usize,
+    },
     /// Input contains fewer points than one window.
     SignalTooShort {
         /// Actual input length.
@@ -70,8 +78,8 @@ pub enum Error {
         /// Index of the first non-finite sample.
         index: usize,
     },
-    /// A fit is numerically rank deficient, a scaling or a result is
-    /// unrepresentable, or arithmetic became non-finite.
+    /// A polynomial fit is numerically rank deficient, a scaling or a result
+    /// is unrepresentable, or arithmetic became non-finite.
     NumericalFailure,
     /// A requested allocation exceeds addressable capacity or could not be reserved.
     AllocationFailure,
@@ -104,6 +112,13 @@ impl fmt::Display for Error {
             Self::InvalidComponentCount { requested, maximum } => write!(
                 f,
                 "component count {requested} must be between 1 and {maximum}"
+            ),
+            Self::InsufficientRank {
+                requested,
+                supported,
+            } => write!(
+                f,
+                "component count {requested} exceeds the numerical rank {supported} of the data"
             ),
             Self::SignalTooShort {
                 length,

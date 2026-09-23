@@ -139,15 +139,16 @@ impl Pca {
     /// # Errors
     /// Checks the data shape, then the sample count, then the component count,
     /// then non-finite values, in that order. Returns
-    /// [`Error::NumericalFailure`] if a requested component is not
-    /// distinguishable from rounding in the data, so its direction would be
-    /// arbitrary, or if the variances of such large or small values overflow or
-    /// underflow. A singular value counts as rounding at or below
-    /// `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the norm of the
-    /// uncentred data, since centring cannot remove rounding smaller than the
-    /// values themselves. Returns [`Error::AllocationFailure`] if the model or
-    /// the working memory cannot be reserved; allocations inside the
-    /// decomposition's matrix kernels may still abort on failure.
+    /// [`Error::InsufficientRank`], with the number of components the data
+    /// support, if a requested component is not distinguishable from rounding,
+    /// so its direction would be arbitrary. A singular value counts as rounding
+    /// at or below `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the
+    /// norm of the uncentred data, since centring cannot remove rounding
+    /// smaller than the values themselves. Returns [`Error::NumericalFailure`]
+    /// if the variances of very large or very small data overflow or
+    /// underflow, and [`Error::AllocationFailure`] if the model or the working
+    /// memory cannot be reserved; allocations inside the decomposition's
+    /// matrix kernels may still abort on failure.
     ///
     /// # Example
     /// ```
@@ -204,10 +205,17 @@ impl Pca {
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
         let threshold = f64::EPSILON * samples.max(variables) as f64 * uncentred_norm;
-        let kept = &svd.values[..components];
-        if kept.iter().any(|s| *s <= threshold) {
-            return Err(Error::NumericalFailure);
+        let supported = svd.values[..maximum]
+            .iter()
+            .filter(|s| **s > threshold)
+            .count();
+        if supported < components {
+            return Err(Error::InsufficientRank {
+                requested: components,
+                supported,
+            });
         }
+        let kept = &svd.values[..components];
         // Centring removes one direction, so with no more samples than
         // variables the last singular value is rounding, not variation.
         let mut eigenvalues = numeric::zeros(maximum)?;
@@ -312,12 +320,11 @@ impl Pca {
     ///
     /// The discarded eigenvalues `all_eigenvalues()[components..]` give the
     /// Jackson–Mudholkar limit for Q, and divided by [`Pca::total_variance`]
-    /// they show how many components the data supports, even where fitting
-    /// that many fails. Preprocessing such as SNV or detrending removes
-    /// directions from the data, so trailing eigenvalues can be rounding rather
-    /// than variation: those at or below the square of the rounding bound
-    /// described on [`Pca::fit`], divided by `samples − 1`. Eigenvalues far
-    /// below the largest may underflow to zero.
+    /// they show how much further components would explain. Preprocessing such
+    /// as SNV or detrending removes directions from the data, so trailing
+    /// eigenvalues can be rounding rather than variation: those at or below
+    /// the square of the rounding bound described on [`Pca::fit`], divided by
+    /// `samples − 1`. Eigenvalues far below the largest may underflow to zero.
     pub fn all_eigenvalues(&self) -> &[f64] {
         &self.eigenvalues
     }
