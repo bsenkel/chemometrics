@@ -165,7 +165,7 @@ finds a spectrum that is extreme in directions the model knows, Q finds one that
 carries variation the model does not describe, such as an unexpected band.
 `project_into` writes the scores into a caller-owned buffer without allocating.
 Control limits are not computed; their formulas are documented on the
-`Diagnostics` fields.
+`Diagnostics` fields, and the `pca` example computes both.
 
 `all_eigenvalues` returns the eigenvalues of every component the data allows,
 the retained ones first. The discarded ones give the Jackson–Mudholkar limit for

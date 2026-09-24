@@ -7,6 +7,9 @@ use std::f64::consts::LN_2;
 const WAVELENGTHS: usize = 1401;
 /// Approved lots that define good material.
 const LOTS: usize = 40;
+/// Approved lots vary in two ways, particle size and surface water. The T²
+/// limit below has a closed form for exactly two components.
+const COMPONENTS: usize = 2;
 
 /// Absorption band with its center and full width at half maximum in nm.
 fn band(wavelength: f64, center: f64, width: f64) -> f64 {
@@ -14,15 +17,21 @@ fn band(wavelength: f64, center: f64, width: f64) -> f64 {
 }
 
 /// Spectrum of a lot with a particle size relative to the usual one, surface
-/// water and magnesium stearate in percent, and measurement noise.
+/// water and magnesium stearate in percent, and measurement noise. Larger
+/// particles lengthen the light path and so strengthen the lactose bands,
+/// including those of its water of crystallization at 1450 and 1930 nm.
 fn measure(size: f64, water: f64, stearate: f64, random: &mut impl FnMut() -> f64) -> Vec<f64> {
     (0..WAVELENGTHS)
         .map(|i| {
             let w = 1100.0 + i as f64;
-            let lactose = band(w, 1535.0, 50.0) + band(w, 2090.0, 60.0) + band(w, 2270.0, 50.0);
+            let lactose = 0.5 * band(w, 1450.0, 60.0)
+                + band(w, 1535.0, 50.0)
+                + band(w, 1930.0, 40.0)
+                + band(w, 2090.0, 60.0)
+                + band(w, 2270.0, 50.0);
             size * lactose
                 + 0.1 * water * band(w, 1940.0, 110.0)
-                + 0.01 * stearate * band(w, 1725.0, 30.0)
+                + 0.01 * stearate * (band(w, 1725.0, 30.0) + band(w, 2310.0, 30.0))
                 + 1e-4 * random()
         })
         .collect()
@@ -36,12 +45,17 @@ fn t2_limit(n: f64) -> f64 {
 }
 
 /// 99 % limit of Q after Jackson and Mudholkar, from the discarded eigenvalues.
+/// It is approximate; with fewer lots than wavelengths it rejects fewer good
+/// lots than 1 %.
 fn q_limit(discarded: &[f64]) -> f64 {
     let theta = |power| discarded.iter().map(|l| l.powi(power)).sum::<f64>();
-    let (t1, t2, t3) = (theta(1), theta(2), theta(3));
-    let h = 1.0 - 2.0 * t1 * t3 / (3.0 * t2 * t2);
-    let z = 2.326_347_874; // standard normal quantile for 99 %
-    t1 * (z * (2.0 * t2 * h * h).sqrt() / t1 + 1.0 + t2 * h * (h - 1.0) / (t1 * t1)).powf(1.0 / h)
+    let (theta1, theta2, theta3) = (theta(1), theta(2), theta(3));
+    let h = 1.0 - 2.0 * theta1 * theta3 / (3.0 * theta2 * theta2);
+    let z = 2.326_347_874_040_841; // standard normal quantile for 99 %
+    let base = z * (2.0 * theta2 * h * h).sqrt() / theta1
+        + 1.0
+        + theta2 * h * (h - 1.0) / (theta1 * theta1);
+    theta1 * base.powf(1.0 / h)
 }
 
 fn main() -> Result<(), chemometrics::Error> {
@@ -54,44 +68,40 @@ fn main() -> Result<(), chemometrics::Error> {
             .wrapping_add(1442695040888963407);
         (state >> 11) as f64 / (1u64 << 52) as f64 - 1.0
     };
-    // Approved lots differ in particle size and surface water.
     let mut references = Vec::with_capacity(LOTS * WAVELENGTHS);
     for _ in 0..LOTS {
         let (size, water) = (1.0 + 0.1 * random(), 0.2 + 0.1 * random());
         references.extend(measure(size, water, 0.0, &mut random));
     }
-    let model = Pca::fit(&references, WAVELENGTHS, 2)?;
+    let model = Pca::fit(&references, WAVELENGTHS, COMPONENTS)?;
     println!(
         "Explained variance: {:.4?}",
         model.explained_variance_ratio()
     );
-    let (t2_max, q_max) = (
-        t2_limit(LOTS as f64),
-        q_limit(&model.all_eigenvalues()[2..]),
-    );
-    println!("99 % limits: T² {t2_max:.1}, Q {q_max:.1e}\n");
+    let limit_t2 = t2_limit(LOTS as f64);
+    let limit_q = q_limit(&model.all_eigenvalues()[COMPONENTS..]);
+    println!("99 % limits: T² {limit_t2:.1}, Q {limit_q:.1e}\n");
 
     // T² flags a lot that varies in a known way, but too much; Q flags one
-    // that contains something the approved lots do not.
+    // that contains something the approved lots do not. A lot far outside
+    // also raises Q a little, since a limited number of lots fixes the model
+    // only approximately.
     for (name, size, water, stearate) in [
         ("typical lot", 1.02, 0.21, 0.0),
         ("damp lot", 0.98, 0.45, 0.0),
         ("0.2 % Mg stearate", 1.01, 0.19, 0.2),
     ] {
-        let d = model
+        let diagnostics = model
             .project(&measure(size, water, stearate, &mut random))?
             .diagnostics;
-        let verdict = if d.hotelling_t2 > t2_max {
-            "reject: outside the known variation (T²)"
-        } else if d.q_residual > q_max {
-            "reject: contains something new (Q)"
-        } else {
-            "accept"
+        let (t2, q) = (diagnostics.hotelling_t2, diagnostics.q_residual);
+        let verdict = match (t2 > limit_t2, q > limit_q) {
+            (false, false) => "accept",
+            (true, false) => "reject: known variation, but too much (T²)",
+            (false, true) => "reject: contains something new (Q)",
+            (true, true) => "reject: T² and Q too high",
         };
-        println!(
-            "{name:<18} T² {:5.1}  Q {:.1e}  {verdict}",
-            d.hotelling_t2, d.q_residual
-        );
+        println!("{name:<18} T² {t2:5.1}  Q {q:.1e}  {verdict}");
     }
     Ok(())
 }
