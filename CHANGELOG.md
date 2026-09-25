@@ -7,17 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-25
+
 ### Added
 
 - `pca::Pca` behind the optional `pca` feature: principal component analysis of
-  a set of spectra with Hotelling T² and Q residual outlier statistics and the
-  eigenvalues of all components for Q control limits and choosing the number of
-  components, validated against analytic results and NumPy/scikit-learn
-  references.
+  a set of spectra with Hotelling's T² and the Q residual as outlier statistics,
+  validated against analytic results and NumPy/scikit-learn references.
+- `Pca::all_eigenvalues` for Q control limits and for choosing the number of
+  components.
 - `Error::InvalidDataShape`, `Error::TooFewSpectra`,
   `Error::InvalidSpectrumLength`, `Error::InvalidComponentCount` and
-  `Error::InsufficientRank`, which reports how many components the data
-  supports.
+  `Error::InsufficientRank` for invalid principal component inputs; the last
+  reports how many components the data supports.
+- An executable example that checks incoming lots of a raw material against T²
+  and Q control limits.
 
 ## [0.1.3] - 2026-09-18
 
@@ -59,7 +63,8 @@ Initial release.
 - Documentation, an executable example, MIT license and CI for Linux, macOS,
   Windows and the minimum supported Rust version.
 
-[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/bsenkel/chemometrics/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/bsenkel/chemometrics/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/bsenkel/chemometrics/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/bsenkel/chemometrics/compare/v0.1.0...v0.1.1

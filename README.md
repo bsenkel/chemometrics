@@ -122,7 +122,7 @@ matrix decomposition and therefore a dependency:
 
 ```toml
 [dependencies]
-chemometrics = { version = "0.2", features = ["pca"] }
+chemometrics = { version = "0.1.4", features = ["pca"] }
 ```
 
 ```rust,ignore
@@ -232,7 +232,7 @@ can pass intensities read by `spc-spectra` directly to these filters.
 Additional preprocessing can add slice-based modules. Matrix dependencies stay
 optional and internal, as `pca` shows, so the preprocessing API is unaffected by
 them. f32, no_std, irregular sampling, alternate edge modes, in-place filtering
-and parallel processing are outside version 0.2.
+and parallel processing are outside version 0.1.
 
 ## Numerical validation
 
