@@ -47,7 +47,8 @@ pub struct Diagnostics {
     /// Hotelling's T², the squared distance inside the component plane,
     /// `Σ t²/λ` over the components.
     ///
-    /// Control limits for new spectra follow the F distribution:
+    /// With k components, n training spectra and significance level α, control
+    /// limits for new spectra follow the F distribution:
     /// `T²_limit = k(n²−1)/(n(n−k)) · F(k, n−k; α)`. The training samples took
     /// part in the fit and follow a Beta distribution instead:
     /// `T²_limit = (n−1)²/n · Beta(k/2, (n−k−1)/2; α)`.

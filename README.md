@@ -221,8 +221,8 @@ Planned areas of development, without a fixed release schedule or ordering:
 - PLS regression, autoscaling and control limits for T² and Q, extending the
   `pca` feature
 
-The default functionality will remain dependency-free. Apart from principal
-component analysis, these capabilities are not implemented yet.
+The default functionality will remain dependency-free. None of these is
+implemented yet.
 
 ## Extension boundaries
 

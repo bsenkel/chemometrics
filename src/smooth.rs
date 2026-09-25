@@ -184,10 +184,12 @@ impl SavitzkyGolay {
     /// Differentiation can amplify noise.
     ///
     /// # Errors
-    /// Returns an input error for an invalid window, polynomial order, derivative
-    /// order, or spacing, checked in that order. Returns [`Error::NumericalFailure`]
-    /// for rank deficiency, overflow or complete underflow of derivative scaling,
-    /// or non-finite coefficients. Allocation errors match [`Self::new`].
+    /// Returns [`Error::InvalidWindowLength`],
+    /// [`Error::InvalidPolynomialOrder`], [`Error::InvalidDerivativeOrder`] or
+    /// [`Error::InvalidSampleSpacing`] for invalid parameters, checked in that
+    /// order. Returns [`Error::NumericalFailure`] for rank deficiency, overflow
+    /// or complete underflow of derivative scaling, or non-finite coefficients.
+    /// Allocation errors match [`Self::new`].
     ///
     /// # Example
     /// ```
