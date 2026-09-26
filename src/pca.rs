@@ -12,6 +12,14 @@
 //! variables share one unit and autoscaling would amplify noise; autoscaling
 //! for other data is planned as a separate method.
 //!
+//! Wavelengths are not part of the input: the wavelength of column `j` is known
+//! only to the caller, so loadings are read against the caller's own axis. All
+//! spectra, including those passed to [`Pca::project`], must use the same
+//! wavelengths in the same order; a spectrum on another grid of the same length
+//! passes the length check, and the results then reflect the grid rather than
+//! the sample. Each column enters with equal weight, so a region sampled more
+//! densely counts for more; a uniform grid weights the range evenly.
+//!
 //! [`Pca::project`] places a further spectrum in the model and reports
 //! Hotelling's T² and the Q residual, the two standard outlier statistics.
 //!

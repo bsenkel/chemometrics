@@ -159,6 +159,10 @@ autoscaling would amplify noise-only wavelengths. A component that cannot be
 told apart from rounding gives `Error::InsufficientRank`, which reports how many
 components the data supports.
 
+Wavelengths are not passed, so all spectra, including those given to
+`Pca::project`, must share one wavelength grid in the same order; the length
+check cannot verify this.
+
 `Pca::project` places a further spectrum in the model and returns its scores
 together with Hotelling's T², the squared distance inside the component plane,
 and the Q residual, the squared distance to it. T² finds a spectrum that is
