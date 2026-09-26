@@ -130,9 +130,9 @@ use chemometrics::pca::Pca;
 
 // Four spectra of three wavelengths each, row-major.
 let data = [
-    1.0, 2.0, 3.0, //
-    2.0, 4.1, 6.0, //
-    3.0, 5.9, 9.0, //
+    1.0, 2.0, 3.0,
+    2.0, 4.1, 6.0,
+    3.0, 5.9, 9.0,
     4.0, 8.0, 12.0,
 ];
 let model = Pca::fit(&data, 3, 2)?;

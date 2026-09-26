@@ -10,9 +10,9 @@
 //!
 //! // Four spectra of three wavelengths each, row-major.
 //! let data = [
-//!     1.0, 2.0, 3.0, //
-//!     2.0, 4.1, 6.0, //
-//!     3.0, 5.9, 9.0, //
+//!     1.0, 2.0, 3.0,
+//!     2.0, 4.1, 6.0,
+//!     3.0, 5.9, 9.0,
 //!     4.0, 8.0, 12.0,
 //! ];
 //! let model = Pca::fit(&data, 3, 2)?;
@@ -99,10 +99,10 @@ pub struct Projection {
 /// use chemometrics::pca::Pca;
 /// // Three variables, five samples that vary along one direction only.
 /// let data = [
-///     1.0, 2.0, 3.0, //
-///     2.0, 4.0, 6.0, //
-///     3.0, 6.0, 9.0, //
-///     4.0, 8.0, 12.0, //
+///     1.0, 2.0, 3.0,
+///     2.0, 4.0, 6.0,
+///     3.0, 6.0, 9.0,
+///     4.0, 8.0, 12.0,
 ///     5.0, 10.0, 15.0,
 /// ];
 /// let model = Pca::fit(&data, 3, 1)?;
