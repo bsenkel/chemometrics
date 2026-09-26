@@ -97,7 +97,7 @@ pub struct Projection {
 /// # Examples
 /// ```
 /// use chemometrics::pca::Pca;
-/// // Three variables, five samples that vary along one direction only.
+/// // Five spectra of three wavelengths each, varying along one direction only.
 /// let data = [
 ///     1.0, 2.0, 3.0,
 ///     2.0, 4.0, 6.0,
