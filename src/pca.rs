@@ -1,27 +1,8 @@
 //! Principal component analysis of a set of spectra, with outlier statistics.
 //!
-//! Spectra are passed as one flat row-major slice: row `i` holds the
-//! `variables` intensities of sample `i`. Spectra preprocessed one at a time
-//! are written into such a slice with `apply_into`, as [`Pca::fit`] shows.
-//! Column-major matrices, such as nalgebra's `DMatrix`, must be transposed
-//! first; a slice of the same length in the wrong order cannot be detected
-//! and gives a meaningless model.
-//!
-//! The model mean-centers the data and keeps the leading components.
-//! [`Pca::fit`] does not scale individual variables, because spectral
-//! variables share one unit and autoscaling would amplify noise; autoscaling
-//! for other data is planned as a separate method.
-//!
-//! Wavelengths are not part of the input: the wavelength of column `j` is known
-//! only to the caller, so loadings are read against the caller's own axis. All
-//! spectra, including those passed to [`Pca::project`], must use the same
-//! wavelengths in the same order; a spectrum on another grid of the same length
-//! passes the length check, and the results then reflect the grid rather than
-//! the sample. Each column enters with equal weight, so a region sampled more
-//! densely counts for more; a uniform grid weights the range evenly.
-//!
-//! [`Pca::project`] places a further spectrum in the model and reports
-//! Hotelling's T² and the Q residual, the two standard outlier statistics.
+//! [`Pca::fit`] builds a model from a set of spectra, and [`Pca::project`]
+//! places a further spectrum in it and reports Hotelling's T² and the Q
+//! residual, the two standard outlier statistics.
 //!
 //! # Examples
 //! ```
@@ -44,6 +25,29 @@
 //! # assert!(model.explained_variance_ratio()[0] > 0.99);
 //! # Ok::<(), chemometrics::Error>(())
 //! ```
+//!
+//! # Data layout
+//! Spectra are passed as one flat row-major slice: row `i` holds the
+//! `variables` intensities of sample `i`. Spectra preprocessed one at a time
+//! are written into such a slice with `apply_into`, as [`Pca::fit`] shows.
+//! Column-major matrices, such as nalgebra's `DMatrix`, must be transposed
+//! first; a slice of the same length in the wrong order cannot be detected
+//! and gives a meaningless model.
+//!
+//! # Centering and scaling
+//! The model mean-centers the data and keeps the leading components.
+//! [`Pca::fit`] does not scale individual variables, because spectral
+//! variables share one unit and autoscaling would amplify noise; autoscaling
+//! for other data is planned as a separate method.
+//!
+//! # Wavelengths
+//! Wavelengths are not part of the input: the wavelength of column `j` is known
+//! only to the caller, so loadings are read against the caller's own axis. All
+//! spectra, including those passed to [`Pca::project`], must use the same
+//! wavelengths in the same order; a spectrum on another grid of the same length
+//! passes the length check, and the results then reflect the grid rather than
+//! the sample. Each column enters with equal weight, so a region sampled more
+//! densely counts for more; a uniform grid weights the range evenly.
 use crate::{Error, numeric};
 use std::fmt;
 
