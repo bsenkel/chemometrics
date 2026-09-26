@@ -50,7 +50,7 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
 /// polynomial passes through every sample and the result is zeros. Application
 /// takes O(n × order²) time; one value corrects spectra of any length.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use chemometrics::baseline::Detrend;
 /// // A parabolic baseline under a single band.

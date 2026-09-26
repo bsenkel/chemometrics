@@ -62,7 +62,7 @@ fn map_windows(
 /// Edge values repeat the mean of the first or last complete window.
 /// Application takes O(signal length × window length) time.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use chemometrics::smooth::MovingAverage;
 /// let signal = [0.0, 1.0, 2.0, 3.0, 4.0];
@@ -138,7 +138,7 @@ impl MovingAverage {
 /// Construction stores O(window length²) coefficients. Application takes
 /// O(signal length × window length) time and uses the prepared coefficients.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use chemometrics::smooth::SavitzkyGolay;
 /// let filter = SavitzkyGolay::new(5, 2)?;
@@ -191,7 +191,7 @@ impl SavitzkyGolay {
     /// or complete underflow of derivative scaling, or non-finite coefficients.
     /// Allocation errors match [`Self::new`].
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use chemometrics::smooth::SavitzkyGolay;
     /// // y = x² at x = 0, 0.5, 1, 1.5, 2; dy/dx = 2x.

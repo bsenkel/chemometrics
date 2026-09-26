@@ -21,7 +21,7 @@ use crate::{Error, numeric};
 /// Application takes O(n) time. The transformation has no parameters, so one
 /// value processes spectra of any length.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use chemometrics::normalize::StandardNormalVariate;
 /// let result = StandardNormalVariate.apply(&[1.0, 2.0, 3.0])?;

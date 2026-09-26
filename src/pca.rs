@@ -23,7 +23,7 @@
 //! [`Pca::project`] places a further spectrum in the model and reports
 //! Hotelling's T² and the Q residual, the two standard outlier statistics.
 //!
-//! # Example
+//! # Examples
 //! ```
 //! use chemometrics::pca::Pca;
 //!
@@ -90,7 +90,7 @@ pub struct Projection {
 /// but not the data. `Debug` prints the shape and the eigenvalues only, since
 /// the buffers can hold millions of values.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use chemometrics::pca::Pca;
 /// // Three variables, five samples that vary along one direction only.
