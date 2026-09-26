@@ -174,7 +174,13 @@ impl Pca {
     /// # Examples
     /// ```
     /// use chemometrics::pca::Pca;
-    /// let data = [0.0, 1.0, 1.0, 3.0, 2.0, 5.0, 3.0, 7.0];
+    /// // Four spectra of two wavelengths each.
+    /// let data = [
+    ///     0.0, 1.0,
+    ///     1.0, 3.0,
+    ///     2.0, 5.0,
+    ///     3.0, 7.0,
+    /// ];
     /// let model = Pca::fit(&data, 2, 1)?;
     /// assert_eq!(model.samples(), 4);
     /// assert_eq!(model.mean().len(), 2);
