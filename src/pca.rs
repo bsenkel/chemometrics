@@ -1,9 +1,11 @@
 //! Principal component analysis of a set of spectra, with outlier statistics.
 //!
 //! Spectra are passed as one flat row-major slice: row `i` holds the
-//! `variables` intensities of sample `i`. Column-major matrices, such as
-//! nalgebra's `DMatrix`, must be transposed first; a slice of the same length
-//! in the wrong order cannot be detected and gives a meaningless model.
+//! `variables` intensities of sample `i`. Spectra preprocessed one at a time
+//! are written into such a slice with `apply_into`, as [`Pca::fit`] shows.
+//! Column-major matrices, such as nalgebra's `DMatrix`, must be transposed
+//! first; a slice of the same length in the wrong order cannot be detected
+//! and gives a meaningless model.
 //!
 //! The model mean-centers the data and keeps the leading components.
 //! [`Pca::fit`] does not scale individual variables, because spectral
@@ -157,7 +159,7 @@ impl Pca {
     /// be reserved; allocations inside the decomposition's matrix kernels may
     /// still abort on failure.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use chemometrics::pca::Pca;
     /// let data = [0.0, 1.0, 1.0, 3.0, 2.0, 5.0, 3.0, 7.0];
@@ -166,6 +168,34 @@ impl Pca {
     /// assert_eq!(model.mean().len(), 2);
     /// # Ok::<(), chemometrics::Error>(())
     /// ```
+    ///
+    /// Spectra preprocessed one at a time are written straight into the rows
+    /// of `data` with the `apply_into` methods. They reject a spectrum whose
+    /// length differs from `variables`; unless it is too short for the method
+    /// itself, the error is [`Error::OutputLengthMismatch`], whose `expected`
+    /// is the length of that spectrum, not `variables`:
+    /// ```
+    /// use chemometrics::{normalize::StandardNormalVariate, pca::Pca};
+    /// // Three spectra of five wavelengths each.
+    /// let raw = [
+    ///     [0.50, 0.62, 0.81, 0.70, 0.55],
+    ///     [0.55, 0.70, 0.86, 0.72, 0.58],
+    ///     [0.48, 0.58, 0.83, 0.75, 0.52],
+    /// ];
+    /// let variables = 5;
+    /// let mut data = vec![0.0; raw.len() * variables];
+    /// for (spectrum, row) in raw.iter().zip(data.chunks_mut(variables)) {
+    ///     StandardNormalVariate.apply_into(spectrum, row)?;
+    /// }
+    /// let model = Pca::fit(&data, variables, 1)?;
+    /// assert_eq!(model.samples(), 3);
+    /// # Ok::<(), chemometrics::Error>(())
+    /// ```
+    ///
+    /// Spectra that already exist as separate vectors can be joined with
+    /// `concat`, at the cost of an extra copy. `concat` does not check that all
+    /// spectra have the same length; `fit` notices only a total length that is
+    /// not a multiple of `variables`.
     pub fn fit(data: &[f64], variables: usize, components: usize) -> Result<Self, Error> {
         let samples = samples_of(data.len(), variables)?;
         if samples < 2 {

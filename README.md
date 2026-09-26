@@ -148,14 +148,16 @@ the feature; the module documentation carries the tested version.
 
 A set of spectra is one flat row-major slice plus the number of variables per
 sample, which is the layout of a C-ordered NumPy array or an `ndarray` row-major
-view. Column-major matrices, such as nalgebra's `DMatrix` or Fortran-ordered
-NumPy arrays, must be transposed first: their slice has the same length, so the
-mistake cannot be detected and gives a meaningless model. `Pca::fit`
-mean-centers the data and keeps the requested number of components, at most
-`min(samples - 1, variables)`. It does not scale individual variables, since
-spectral variables share one unit and autoscaling would amplify noise-only
-wavelengths. A component that cannot be told apart from rounding gives
-`Error::InsufficientRank`, which reports how many components the data supports.
+view. Spectra preprocessed one at a time are written into such a slice with
+`apply_into`, as the documentation of `Pca::fit` shows. Column-major matrices,
+such as nalgebra's `DMatrix` or Fortran-ordered NumPy arrays, must be transposed
+first: their slice has the same length, so the mistake cannot be detected and
+gives a meaningless model. `Pca::fit` mean-centers the data and keeps the
+requested number of components, at most `min(samples - 1, variables)`. It does
+not scale individual variables, since spectral variables share one unit and
+autoscaling would amplify noise-only wavelengths. A component that cannot be
+told apart from rounding gives `Error::InsufficientRank`, which reports how many
+components the data supports.
 
 `Pca::project` places a further spectrum in the model and returns its scores
 together with Hotelling's T², the squared distance inside the component plane,
