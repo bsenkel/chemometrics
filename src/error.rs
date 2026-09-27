@@ -58,14 +58,8 @@ pub enum Error {
         /// Number of components that stand out from rounding.
         supported: usize,
     },
-    /// Input contains fewer points than one window.
-    SignalTooShort {
-        /// Actual input length.
-        length: usize,
-        /// Required minimum length.
-        window_length: usize,
-    },
-    /// Input contains fewer samples than the operation requires.
+    /// Signal contains fewer samples than the operation requires, such as
+    /// fewer than one filter window.
     TooFewSamples {
         /// Actual input length.
         length: usize,
@@ -128,13 +122,6 @@ impl fmt::Display for Error {
             } => write!(
                 f,
                 "component count {requested} exceeds the numerical rank {supported} of the data"
-            ),
-            Self::SignalTooShort {
-                length,
-                window_length,
-            } => write!(
-                f,
-                "signal length {length} is smaller than window length {window_length}"
             ),
             Self::TooFewSamples { length, minimum } => {
                 write!(f, "at least {minimum} samples are required, got {length}")

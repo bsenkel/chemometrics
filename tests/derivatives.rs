@@ -171,11 +171,11 @@ fn derivatives_reuse_and_preserve_buffer_on_invalid_input() {
     for input in [&[][..], &[1.0; 4][..]] {
         assert!(matches!(
             filter.apply_into(input, &mut buffer),
-            Err(Error::SignalTooShort { .. })
+            Err(Error::TooFewSamples { .. })
         ));
         assert!(matches!(
             filter.apply(input),
-            Err(Error::SignalTooShort { .. })
+            Err(Error::TooFewSamples { .. })
         ));
         assert_eq!(buffer, [42.0; 7]);
     }

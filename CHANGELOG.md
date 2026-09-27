@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `MovingAverage` and `SavitzkyGolay` report a signal shorter than the window
+  as `Error::TooFewSamples`, like the per-spectrum transforms.
+
+### Removed
+
+- `Error::SignalTooShort`, replaced by `Error::TooFewSamples`.
+
 ## [0.1.4] - 2026-09-25
 
 ### Added

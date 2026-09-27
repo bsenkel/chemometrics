@@ -103,8 +103,12 @@ fn validation_and_buffer_preservation() {
     let ma = MovingAverage::new(3).unwrap();
     let sg = SavitzkyGolay::new(3, 2).unwrap();
     for input in [&[][..], &[1., 2.][..]] {
-        assert!(matches!(ma.apply(input), Err(Error::SignalTooShort { .. })));
-        assert!(matches!(sg.apply(input), Err(Error::SignalTooShort { .. })));
+        let too_short = Err(Error::TooFewSamples {
+            length: input.len(),
+            minimum: 3,
+        });
+        assert_eq!(ma.apply(input), too_short);
+        assert_eq!(sg.apply(input), too_short);
     }
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         let input = [1., value, f64::NAN];
@@ -133,12 +137,12 @@ fn validation_and_buffer_preservation() {
     assert_eq!(buffer, [42.; 2]);
     assert!(matches!(
         sg.apply_into(&[1.; 2], &mut buffer),
-        Err(Error::SignalTooShort { .. })
+        Err(Error::TooFewSamples { .. })
     ));
     assert_eq!(buffer, [42.; 2]);
     assert!(matches!(
         ma.apply_into(&[1.; 2], &mut buffer),
-        Err(Error::SignalTooShort { .. })
+        Err(Error::TooFewSamples { .. })
     ));
     assert_eq!(buffer, [42.; 2]);
 }

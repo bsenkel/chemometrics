@@ -12,25 +12,6 @@ fn window_valid(window: usize) -> Result<(), Error> {
     Ok(())
 }
 
-fn validate(input: &[f64], output_len: usize, window: usize) -> Result<(), Error> {
-    if input.len() < window {
-        return Err(Error::SignalTooShort {
-            length: input.len(),
-            window_length: window,
-        });
-    }
-    if output_len != input.len() {
-        return Err(Error::OutputLengthMismatch {
-            expected: input.len(),
-            actual: output_len,
-        });
-    }
-    if let Some(index) = input.iter().position(|x| !x.is_finite()) {
-        return Err(Error::NonFiniteInput { index });
-    }
-    Ok(())
-}
-
 fn start(i: usize, window: usize, length: usize) -> usize {
     i.saturating_sub(window / 2).min(length - window)
 }
@@ -92,7 +73,7 @@ impl MovingAverage {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        validate(input, input.len(), self.window_length)?;
+        numeric::validate(input, input.len(), self.window_length)?;
         let mut output = numeric::zeros(input.len())?;
         self.filter(input, &mut output)?;
         Ok(output)
@@ -104,12 +85,12 @@ impl MovingAverage {
     /// a partially written buffer.
     ///
     /// # Errors
-    /// Returns [`Error::SignalTooShort`] for a signal shorter than the window,
+    /// Returns [`Error::TooFewSamples`] for a signal shorter than the window,
     /// [`Error::OutputLengthMismatch`] for a buffer of different length and
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
     /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        validate(input, output.len(), self.window_length)?;
+        numeric::validate(input, output.len(), self.window_length)?;
         self.filter(input, output)
     }
 
@@ -241,7 +222,7 @@ impl SavitzkyGolay {
     /// Returns [`Error::AllocationFailure`] if the result cannot be reserved.
     /// Other errors match [`Self::apply_into`].
     pub fn apply(&self, input: &[f64]) -> Result<Vec<f64>, Error> {
-        validate(input, input.len(), self.window_length)?;
+        numeric::validate(input, input.len(), self.window_length)?;
         let mut output = numeric::zeros(input.len())?;
         self.filter(input, &mut output)?;
         Ok(output)
@@ -253,12 +234,12 @@ impl SavitzkyGolay {
     /// a partially written buffer.
     ///
     /// # Errors
-    /// Returns [`Error::SignalTooShort`] for a signal shorter than the window,
+    /// Returns [`Error::TooFewSamples`] for a signal shorter than the window,
     /// [`Error::OutputLengthMismatch`] for a buffer of different length and
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
     /// Returns [`Error::NumericalFailure`] if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-        validate(input, output.len(), self.window_length)?;
+        numeric::validate(input, output.len(), self.window_length)?;
         self.filter(input, output)
     }
 

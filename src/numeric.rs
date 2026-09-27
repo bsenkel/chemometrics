@@ -56,7 +56,8 @@ fn power_of_two_floor(magnitude: f64) -> f64 {
     }
 }
 
-/// Checks a spectrum and its output buffer for the per-spectrum transforms.
+/// Checks a signal and its output buffer for the filters and per-spectrum
+/// transforms.
 ///
 /// Reports too few samples, a buffer of different length and non-finite input,
 /// in that order, before anything is written.
