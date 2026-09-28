@@ -129,15 +129,15 @@ impl Detrend {
                 2.0 * i as f64 / (count - 1.0) - 1.0
             }
         };
+        // Gram polynomials shrink geometrically with their degree. Measured
+        // against `sqrt(count)`, the norm of the constant basis polynomial, the
+        // tolerance stops the fit once a degree has shrunk to rounding level.
+        let tolerance = numeric::rank_tolerance(input.len(), self.minimum_length(), count.sqrt());
         for degree in 0..=self.polynomial_order {
             let basis = |i: usize| gram(degree, coordinate(i), count);
             let square = numeric::sum((0..input.len()).map(basis).map(|b| b * b));
-            // Gram polynomials shrink geometrically with their degree. The
-            // threshold has the same form as the one in `numeric::kernels`,
-            // with `sqrt(count)` the norm of the constant basis polynomial, and
-            // stops the fit once a degree has shrunk to rounding level.
             let norm = square.sqrt();
-            if !norm.is_finite() || norm <= f64::EPSILON * count * count.sqrt() {
+            if !norm.is_finite() || norm <= tolerance {
                 return Err(Error::NumericalFailure);
             }
             // Projecting the running residual rather than the input keeps

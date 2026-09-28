@@ -80,6 +80,12 @@ pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Resu
     Ok(())
 }
 
+/// Standard scale-dependent rank threshold: a norm or singular value at or
+/// below it is rounding rather than information.
+pub(crate) fn rank_tolerance(rows: usize, columns: usize, norm: f64) -> f64 {
+    f64::EPSILON * rows.max(columns) as f64 * norm
+}
+
 /// Divides samples by a power of two near their largest magnitude and
 /// subtracts the scaled first sample.
 ///
@@ -178,8 +184,7 @@ pub(crate) fn kernels(
         }
     }
     let norm = a.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
-    // Standard scale-dependent rank threshold, using the Frobenius norm.
-    let tolerance = f64::EPSILON * window.max(columns) as f64 * norm;
+    let tolerance = rank_tolerance(window, columns, norm);
     let mut reflectors = reserved(columns)?;
     for k in 0..columns {
         let norm = (k..window).fold(0.0_f64, |norm, i| norm.hypot(a[i * columns + k]));

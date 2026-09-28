@@ -260,7 +260,7 @@ impl Pca {
         let degrees = (samples - 1) as f64;
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
-        let threshold = f64::EPSILON * samples.max(variables) as f64 * uncentred_norm;
+        let threshold = numeric::rank_tolerance(samples, variables, uncentred_norm);
         let supported = svd.values[..maximum]
             .iter()
             .filter(|s| **s > threshold)
