@@ -10,21 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `MovingAverage` and `SavitzkyGolay` report a signal shorter than the window
-  as `Error::TooFewSamples`, like the per-spectrum transforms.
-- `MovingAverage` returns `Error::NumericalFailure` when the sum of a window
-  exceeds the `f64` range, as for values near `f64::MAX`, instead of rescaling
-  internally.
-- `Pca::fit` returns `Error::NumericalFailure` for data beyond roughly 1e±150,
-  whose squares or retained variances leave the range of normal `f64` numbers,
-  instead of rescaling internally. Within that range results are unchanged or,
-  for T², slightly more precise.
-- `StandardNormalVariate` returns `Error::NumericalFailure` for spectra whose
-  deviations from the mean lie beyond roughly 1e±150, where their squares leave
-  the range of normal `f64` numbers, instead of rescaling internally.
-- `Detrend` no longer rescales internally. Results are unchanged except for
-  subnormal inputs below about 2.2e-308, which lose a little precision.
-- The message of `Error::NumericalFailure` also names values beyond the
-  supported range.
+  as `Error::TooFewSamples`.
+- `StandardNormalVariate` and `Pca` return `Error::NumericalFailure` for data
+  beyond about 1e±150, and `MovingAverage` for window sums beyond the `f64`
+  range. Results within that range are unchanged up to rounding.
 
 ### Removed
 

@@ -49,7 +49,7 @@ Compare reference values using the existing absolute-plus-relative tolerance. Sc
 - Follow the [Semantic Versioning](https://semver.org/) specification.
 - Keep commits focused.
 - Update `CHANGELOG.md` after every meaningful change (new features, bug fixes, breaking changes, deprecations, removals).
-- The `CHANGELOG.md` is user-facing only. Refactoring, test infrastructure and documentation wording are deliberately left to the commit history.
+- The `CHANGELOG.md` is user-facing only: describe each change briefly by what callers observe, not how it is implemented, and name the replacement for anything removed. Refactoring, test infrastructure and documentation wording are deliberately left to the commit history.
 
 ## Commit & Pull Request Guidelines
 
