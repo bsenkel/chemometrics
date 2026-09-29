@@ -105,7 +105,7 @@ rows.append("# Exactly determined case: three components describe the data compl
 data = rng.standard_normal((4, 3))
 add_case(data, 3, [data[1], data[2]])
 
-rows.append("# Large offset and small magnitude, testing the internal scaling.")
+rows.append("# An offset of 1e6 and magnitudes of 1e-8 and 1e8.")
 data = rng.standard_normal((8, 5))
 for factor, offset in ((1.0, 1e6), (1e-8, 0.0), (1e8, 0.0)):
     shifted = factor * data + offset
