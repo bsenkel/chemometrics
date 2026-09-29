@@ -96,15 +96,7 @@ impl MovingAverage {
 
     fn filter(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         map_windows(input, output, self.window_length, |_, samples| {
-            let scale = samples.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
-            if scale == 0.0 {
-                return 0.0;
-            }
-            // Normalize before summation, including for values near f64::MAX.
-            // The exact normalized mean is in [-1, 1]; clamp rounding drift
-            // before rescaling so a finite constant cannot overflow.
-            let normalized = numeric::sum(samples.iter().map(|x| x / scale)) / samples.len() as f64;
-            normalized.clamp(-1.0, 1.0) * scale
+            numeric::sum(samples.iter().copied()) / samples.len() as f64
         })
     }
 }

@@ -150,8 +150,10 @@ fn validation_and_buffer_preservation() {
 #[test]
 fn extreme_values_do_not_succeed_with_nonfinite_results() {
     let max = f64::MAX;
-    let average = MovingAverage::new(3).unwrap().apply(&[max; 3]).unwrap();
-    assert!(average.iter().all(|x| x.is_finite()));
+    assert_eq!(
+        MovingAverage::new(3).unwrap().apply(&[max; 3]),
+        Err(Error::NumericalFailure)
+    );
     let input = [-max, max, max, max, -max];
     assert_eq!(
         SavitzkyGolay::new(5, 2).unwrap().apply(&input),

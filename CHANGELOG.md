@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `MovingAverage` and `SavitzkyGolay` report a signal shorter than the window
   as `Error::TooFewSamples`, like the per-spectrum transforms.
+- `MovingAverage` returns `Error::NumericalFailure` when the sum of a window
+  exceeds the `f64` range, as for values near `f64::MAX`, instead of rescaling
+  internally.
 
 ### Removed
 
