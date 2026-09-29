@@ -124,11 +124,6 @@ pub struct Pca {
     eigenvalues: Vec<f64>,
     ratios: Vec<f64>,
     total_variance: f64,
-    /// Power-of-two scale of the training data.
-    scale: numeric::Scale,
-    /// Score standard deviations in scaled units, which stay precise where the
-    /// eigenvalues in data units have become subnormal.
-    deviations: Vec<f64>,
 }
 
 impl fmt::Debug for Pca {
@@ -165,11 +160,11 @@ impl Pca {
     /// singular value counts as rounding at or below
     /// `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the norm of the
     /// uncentered data, since centering cannot remove rounding smaller than the
-    /// values themselves. Returns [`Error::NumericalFailure`] if the variances
-    /// of very large or very small data overflow or underflow, and
-    /// [`Error::AllocationFailure`] if the model or the working memory cannot
-    /// be reserved; allocations inside the decomposition's matrix kernels may
-    /// still abort on failure.
+    /// values themselves. Returns [`Error::NumericalFailure`] for data beyond
+    /// roughly 1e±150, whose squares or retained variances leave the range of
+    /// normal numbers, and [`Error::AllocationFailure`] if the model or the
+    /// working memory cannot be reserved; allocations inside the
+    /// decomposition's matrix kernels may still abort on failure.
     ///
     /// # Examples
     /// ```
@@ -232,21 +227,12 @@ impl Pca {
         if let Some(index) = data.iter().position(|x| !x.is_finite()) {
             return Err(Error::NonFiniteInput { index });
         }
-        // Scale before centering: sums of values near f64::MAX would otherwise
-        // overflow while forming the column means.
-        let scale = numeric::Scale::new(data);
-        let mut centered = numeric::zeros(data.len())?;
         // Centering leaves rounding of the order of EPSILON times the
         // uncentered values, which a tolerance relative to the centered data
         // cannot see.
-        let uncentred_norm = numeric::sum(data.iter().map(|x| {
-            let x = scale.divide(*x);
-            x * x
-        }))
-        .sqrt();
-        for (value, x) in centered.iter_mut().zip(data) {
-            *value = scale.divide(*x);
-        }
+        let uncentred_norm = numeric::sum(data.iter().map(|x| x * x)).sqrt();
+        let mut centered = numeric::zeros(data.len())?;
+        centered.copy_from_slice(data);
         let mut mean = numeric::zeros(variables)?;
         for (j, value) in mean.iter_mut().enumerate() {
             let column = centered.iter().skip(j).step_by(variables).copied();
@@ -259,6 +245,11 @@ impl Pca {
         }
         let degrees = (samples - 1) as f64;
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
+        // Squares beyond the representable range would make the rank test below
+        // meaningless.
+        if !uncentred_norm.is_finite() || !variance.is_finite() {
+            return Err(Error::NumericalFailure);
+        }
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
         let threshold = numeric::rank_tolerance(samples, variables, uncentred_norm);
         let supported = svd.values[..maximum]
@@ -276,16 +267,11 @@ impl Pca {
         // variables the last singular value is rounding, not variation.
         let mut eigenvalues = numeric::zeros(maximum)?;
         for (eigenvalue, value) in eigenvalues.iter_mut().zip(&svd.values) {
-            *eigenvalue = scale.restore_squared(value * value / degrees);
+            *eigenvalue = value * value / degrees;
         }
-        // Shares and T² do not depend on the scale, so they are taken from the
-        // scaled values, which keep full precision for any data magnitude.
         let mut ratios = numeric::zeros(components)?;
-        let mut deviations = numeric::zeros(components)?;
-        for (a, value) in kept.iter().enumerate() {
-            let scaled = value * value / degrees;
-            ratios[a] = scaled / variance;
-            deviations[a] = scaled.sqrt();
+        for (ratio, eigenvalue) in ratios.iter_mut().zip(&eigenvalues) {
+            *ratio = eigenvalue / variance;
         }
         // The product is bounded by the data length, so it cannot overflow.
         let mut scores = numeric::zeros(samples * components)?;
@@ -294,11 +280,8 @@ impl Pca {
             .zip(svd.left.chunks_exact(components))
         {
             for ((score, u), value) in row.iter_mut().zip(left).zip(kept) {
-                *score = scale.restore(u * value);
+                *score = u * value;
             }
-        }
-        for value in &mut mean {
-            *value = scale.restore(*value);
         }
         let mut model = Self {
             samples,
@@ -309,9 +292,7 @@ impl Pca {
             scores,
             eigenvalues,
             ratios,
-            total_variance: scale.restore_squared(variance),
-            scale,
-            deviations,
+            total_variance: variance,
         };
         model.orient();
         model.usable()?;
@@ -439,9 +420,6 @@ impl Pca {
         if let Some(index) = spectrum.iter().position(|x| !x.is_finite()) {
             return Err(Error::NonFiniteInput { index });
         }
-        // No scaling here: the spectrum may differ from the training data by
-        // any factor, and the differences overflow or underflow only where
-        // the scores or Q do.
         let centered = || spectrum.iter().zip(&self.mean).map(|(x, m)| x - m);
         let loadings = || self.loadings.chunks_exact(self.variables);
         for (score, loading) in scores.iter_mut().zip(loadings()) {
@@ -455,13 +433,12 @@ impl Pca {
                 .map(|(j, d)| d - numeric::sum(loadings().zip(scores).map(|(p, t)| t * p[j])))
         };
         let q_residual = numeric::sum(residuals().map(|r| r * r));
-        // T² is scale invariant, so scores and deviations are compared in the
-        // scaled units of the training data.
-        let hotelling_t2 =
-            numeric::sum(scores.iter().zip(&self.deviations).map(|(t, deviation)| {
-                let ratio = self.scale.divide(*t) / deviation;
-                ratio * ratio
-            }));
+        let hotelling_t2 = numeric::sum(
+            scores
+                .iter()
+                .zip(self.eigenvalues())
+                .map(|(t, eigenvalue)| t * t / eigenvalue),
+        );
         let diagnostics = Diagnostics {
             hotelling_t2,
             q_residual,
@@ -502,15 +479,15 @@ impl Pca {
         }
     }
 
-    /// Rejects models whose rescaled values left the representable range.
+    /// Rejects models whose values left the range of normal numbers.
     ///
-    /// An eigenvalue that underflowed to zero would leave a model whose every
-    /// projection fails, so it is rejected here rather than later.
+    /// T² divides by the retained eigenvalues, so one that underflowed to zero
+    /// or to a subnormal number would make every projection fail or lose its
+    /// digits; it is rejected here rather than later.
     fn usable(&self) -> Result<(), Error> {
         let finite = |values: &[f64]| values.iter().all(|x| x.is_finite());
-        if self.total_variance.is_finite()
-            && self.total_variance > 0.0
-            && self.eigenvalues().iter().all(|v| *v > 0.0)
+        if self.total_variance.is_normal()
+            && self.eigenvalues().iter().all(|v| v.is_normal())
             && finite(&self.mean)
             && finite(&self.ratios)
             && finite(&self.scores)
@@ -537,8 +514,6 @@ mod tests {
             eigenvalues: vec![1.0],
             ratios: vec![1.0],
             total_variance: 1.0,
-            scale: numeric::Scale::new(&[1.0]),
-            deviations: vec![1.0],
         };
         model.orient();
         assert_eq!(model.loadings, [0.5, -0.5]);

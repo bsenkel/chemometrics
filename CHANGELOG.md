@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `MovingAverage` returns `Error::NumericalFailure` when the sum of a window
   exceeds the `f64` range, as for values near `f64::MAX`, instead of rescaling
   internally.
+- `Pca::fit` returns `Error::NumericalFailure` for data beyond roughly 1e±150,
+  whose squares or retained variances leave the range of normal `f64` numbers,
+  instead of rescaling internally. Within that range results are unchanged or,
+  for T², slightly more precise.
 
 ### Removed
 

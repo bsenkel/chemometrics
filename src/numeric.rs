@@ -103,8 +103,6 @@ pub(crate) struct Shift {
 /// [1, 2), or `1.0` when every sample is zero.
 ///
 /// Dividing by it is exact, so scaled results are restored without error.
-/// Restoring states the units: `restore` for a quantity in sample units,
-/// `restore_squared` for one in their square, such as a variance.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Scale {
     factor: f64,
@@ -128,11 +126,6 @@ impl Scale {
 
     pub(crate) fn restore(self, x: f64) -> f64 {
         x * self.factor
-    }
-
-    #[cfg(feature = "pca")]
-    pub(crate) fn restore_squared(self, x: f64) -> f64 {
-        (x * self.factor) * self.factor
     }
 }
 
@@ -372,8 +365,6 @@ mod tests {
         assert_eq!(Shift::new(&[0.0, -0.0]).scale.restore(1.0), 1.0);
         let shift = Shift::new(&[0.5, -3.0]);
         assert_eq!(shift.scale.restore(1.0), 2.0);
-        #[cfg(feature = "pca")]
-        assert_eq!(shift.scale.restore_squared(1.0), 4.0);
         assert_eq!(shift.apply(0.5), 0.0);
         assert_eq!(shift.apply(-3.0), -1.75);
     }

@@ -747,8 +747,8 @@ fn handles_extreme_magnitudes() {
 }
 
 /// Twelve spectra of forty variables whose component variances span many
-/// orders of magnitude, so scaling them pushes one variance below the
-/// representable range before the others.
+/// orders of magnitude, so scaling them down pushes one variance out of the
+/// range of normal numbers before the others.
 fn wide_spread() -> Vec<f64> {
     let mut data = Vec::with_capacity(12 * 40);
     for i in 0..12 {
@@ -764,36 +764,6 @@ fn wide_spread() -> Vec<f64> {
         }
     }
     data
-}
-
-#[test]
-fn shares_and_t2_stay_exact_for_tiny_data() {
-    // Near 2^-497 the smallest eigenvalue in data units is subnormal and keeps
-    // only a few bits, but the shares and T² do not depend on the scale.
-    let base = wide_spread();
-    let reference = Pca::fit(&base, 40, 3).unwrap();
-    let tiny: Vec<f64> = base.iter().map(|x| x * 2.0_f64.powi(-497)).collect();
-    let model = Pca::fit(&tiny, 40, 3).unwrap();
-    assert!(model.eigenvalues()[2] < f64::MIN_POSITIVE);
-    // Each share relative to itself: the smallest is 1e-25 of the largest.
-    close_with(
-        model.explained_variance_ratio(),
-        reference.explained_variance_ratio(),
-        0.0,
-        "",
-    );
-    for (sample, original) in tiny.chunks_exact(40).zip(base.chunks_exact(40)) {
-        let t2 = model.project(sample).unwrap().diagnostics.hotelling_t2;
-        let expected = reference
-            .project(original)
-            .unwrap()
-            .diagnostics
-            .hotelling_t2;
-        assert!(
-            (t2 - expected).abs() <= 1e-10 * expected,
-            "{t2} != {expected}"
-        );
-    }
 }
 
 #[test]
@@ -838,17 +808,17 @@ fn rejects_variances_that_underflow() {
         let factor = 2.0_f64.powi(exponent);
         base.iter().map(|x| x * factor).collect()
     };
-    let usable = scaled(-480);
+    let usable = scaled(-400);
     let model = Pca::fit(&usable, 40, 3).unwrap();
-    assert!(model.eigenvalues().iter().all(|v| *v > 0.0));
+    assert!(model.eigenvalues().iter().all(|v| v.is_normal()));
     assert!(model.project(&usable[..40]).is_ok());
-    // The smallest variance underflows here while the total is still positive,
-    // which would leave a model whose every projection fails.
+    // The smallest variance is subnormal here, so T² would lose its digits,
+    // while the two larger ones still fit.
     assert_eq!(
-        Pca::fit(&scaled(-500), 40, 3).unwrap_err(),
+        Pca::fit(&scaled(-480), 40, 3).unwrap_err(),
         Error::NumericalFailure
     );
-    assert!(Pca::fit(&scaled(-500), 40, 2).is_ok());
+    assert!(Pca::fit(&scaled(-480), 40, 2).is_ok());
 }
 
 #[test]
