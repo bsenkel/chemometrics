@@ -7,11 +7,11 @@
 Spectral preprocessing and chemometric analysis for uniformly sampled spectra
 in Rust, dependency-free by default:
 
-- moving average and Savitzky–Golay smoothing
+- Moving average and Savitzky–Golay smoothing
 - Savitzky–Golay derivatives
-- standard normal variate (SNV) normalization
-- polynomial detrending
-- principal component analysis with Hotelling's T² and the Q residual, behind
+- Standard normal variate (SNV) normalization
+- Polynomial detrending
+- Principal component analysis with Hotelling's T² and the Q residual, behind
   the optional `pca` feature
 
 ## Installation
