@@ -46,10 +46,8 @@ fn map_windows(
 /// # Examples
 /// ```
 /// use chemometrics::smooth::MovingAverage;
-/// let signal = [0.0, 1.0, 2.0, 3.0, 4.0];
-/// let smoothed = MovingAverage::new(3)?.apply(&signal)?;
+/// let smoothed = MovingAverage::new(3)?.apply(&[0.0, 1.0, 2.0, 3.0, 4.0])?;
 /// assert_eq!(smoothed, vec![1.0, 1.0, 2.0, 3.0, 3.0]);
-/// assert_eq!(signal, [0.0, 1.0, 2.0, 3.0, 4.0]);
 /// # Ok::<(), chemometrics::Error>(())
 /// ```
 #[derive(Debug, Clone)]
@@ -101,17 +99,15 @@ impl MovingAverage {
     }
 }
 
-/// Savitzky–Golay smoothing and differentiation with polynomial evaluation at the edges.
+/// Savitzky–Golay smoothing and differentiation, matching SciPy's
+/// `savgol_filter` with `mode="interp"`.
 ///
-/// Matches SciPy's `savgol_filter` with `mode="interp"`.
+/// Each output sample comes from a least-squares polynomial fitted to its
+/// window and evaluated at the sample's position, also at the edges. Orders 2
+/// or 3 are typical; very high orders fail with [`Error::NumericalFailure`].
 ///
-/// Fits use coordinates scaled to [-1, 1] and Householder QR. A diagonal
-/// magnitude at or below `f64::EPSILON * max(rows, columns) * ||A||_F`
-/// is treated as numerical rank deficiency. High polynomial orders can fail
-/// this check; low orders such as 2 or 3 are typical for smoothing.
-///
-/// Construction stores O(window length²) coefficients. Application takes
-/// O(signal length × window length) time and uses the prepared coefficients.
+/// Construction stores window length² coefficients. Application takes
+/// O(signal length × window length) time.
 ///
 /// # Examples
 /// ```
@@ -133,15 +129,15 @@ pub struct SavitzkyGolay {
 }
 
 impl SavitzkyGolay {
-    /// Prepares a filter. The polynomial order must be below the window length.
+    /// Prepares a smoothing filter. The polynomial order must be below the
+    /// window length.
     ///
     /// # Errors
     /// Returns [`Error::InvalidWindowLength`] or
     /// [`Error::InvalidPolynomialOrder`] for invalid parameters, checked in
-    /// that order, and [`Error::NumericalFailure`] if the polynomial fit is
-    /// rank deficient. Returns [`Error::AllocationFailure`] if buffer sizes
-    /// exceed addressable capacity or the allocator cannot reserve the
-    /// requested memory.
+    /// that order, [`Error::NumericalFailure`] if the order is too high to fit
+    /// numerically, and [`Error::AllocationFailure`] if the coefficients cannot
+    /// be reserved.
     pub fn new(window_length: usize, polynomial_order: usize) -> Result<Self, Error> {
         Self::new_derivative(window_length, polynomial_order, 0, 1.0)
     }
@@ -153,18 +149,16 @@ impl SavitzkyGolay {
     /// `sample_spacing` is the constant difference between adjacent x values;
     /// it must be finite and nonzero, even for order zero. Negative spacing
     /// supports descending axes and reverses the sign of odd derivatives.
-    /// Output units are input units divided by x units to the derivative order.
-    ///
-    /// Evaluates each local polynomial's derivative, including at the edges.
-    /// Differentiation can amplify noise.
+    /// Results have the input's units divided by x units to the derivative
+    /// order. Differentiation can amplify noise.
     ///
     /// # Errors
     /// Returns [`Error::InvalidWindowLength`],
     /// [`Error::InvalidPolynomialOrder`], [`Error::InvalidDerivativeOrder`] or
     /// [`Error::InvalidSampleSpacing`] for invalid parameters, checked in that
-    /// order. Returns [`Error::NumericalFailure`] for rank deficiency, overflow
-    /// or complete underflow of derivative scaling, or non-finite coefficients.
-    /// Allocation errors match [`Self::new`].
+    /// order. Returns [`Error::NumericalFailure`] if the order is too high to
+    /// fit numerically or the spacing is so extreme that the coefficients
+    /// overflow or underflow. Allocation errors match [`Self::new`].
     ///
     /// # Examples
     /// ```
