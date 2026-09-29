@@ -4,10 +4,10 @@
 [![Crates.io](https://img.shields.io/crates/v/chemometrics.svg)](https://crates.io/crates/chemometrics)
 [![docs.rs](https://img.shields.io/docsrs/chemometrics)](https://docs.rs/chemometrics)
 
-Spectral preprocessing in Rust, dependency-free by default. Provides moving
-average smoothing and Savitzky–Golay smoothing and numerical derivatives for
-uniformly sampled `f64` signals, standard normal variate (SNV) normalization
-and polynomial detrending of spectra. The optional `pca` feature adds
+Spectral preprocessing and chemometric analysis in Rust, dependency-free by
+default. Provides moving average and Savitzky–Golay smoothing, Savitzky–Golay
+derivatives, standard normal variate (SNV) normalization and polynomial
+detrending for uniformly sampled `f64` spectra. The optional `pca` feature adds
 principal component analysis with outlier statistics.
 
 ```rust
@@ -174,7 +174,7 @@ computes both, the one for Q from `all_eigenvalues`.
 
 Component signs are fixed, so results are reproducible. Fitting takes
 O(samples × variables × min(samples, variables)) time on a single thread; the
-documentation of `Pca` covers the sign convention, extreme magnitudes and memory
+documentation of `Pca` covers the sign convention, the value range and memory
 use.
 
 The feature costs about 50 additional crates through
@@ -217,6 +217,16 @@ time. SG construction prepares O(window²) coefficients using scaled
 Householder QR. Numerically rank-deficient fits return an error. Use modest
 polynomial orders (typically 2 or 3); arbitrary high-order fits are not promised.
 
+## Value range
+
+The crate is built for measured spectra. Values between about 1e-150 and 1e150
+are processed without overflow or underflow, which covers absorbance,
+reflectance and raw detector counts with a wide margin. Beyond that range,
+methods return `NumericalFailure` wherever a result would overflow or lose most
+of its digits, rather than a wrong value; SNV and PCA, which square deviations,
+reach that point first. Subnormal inputs below about 2.2e-308 may lose
+precision, as in any `f64` arithmetic.
+
 ## Roadmap
 
 Planned areas of development, without a fixed release schedule or ordering:
@@ -250,7 +260,7 @@ implementations, stored in `tests/fixtures/`:
 | Savitzky–Golay smoothing and derivatives | SciPy 1.18.1 `savgol_filter`, `mode="interp"` | edges, signals one window long, windows up to 101 |
 | SNV | `scipy.stats.zscore(x, ddof=1)` | large offsets, impulses, NIR-like spectra |
 | Detrend | NumPy `polyfit` residuals, checked against `scipy.signal.detrend` | orders 0 to 3, `order + 1` samples, curved baselines |
-| PCA | `numpy.linalg.svd`, checked against scikit-learn 1.9.1 | tall and wide data, extreme magnitudes, NIR-like mixtures |
+| PCA | `numpy.linalg.svd`, checked against scikit-learn 1.9.1 | tall and wide data, an offset of 1e6, magnitudes of 1e-8 and 1e8, NIR-like mixtures |
 
 Values agree within `1e-10 + 1e-10 * abs(reference)`; for PCA the absolute part
 scales with the precision the data allow. Rust tests need no Python; regenerate

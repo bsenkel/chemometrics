@@ -79,7 +79,8 @@ pub enum Error {
         index: usize,
     },
     /// A polynomial fit is numerically rank deficient, a scaling or a result
-    /// is unrepresentable, or arithmetic became non-finite.
+    /// is unrepresentable, arithmetic became non-finite, or values lie beyond
+    /// the supported range, so that a result would lose most of its digits.
     NumericalFailure,
     /// A requested allocation exceeds addressable capacity or could not be reserved.
     AllocationFailure,
@@ -132,7 +133,7 @@ impl fmt::Display for Error {
             Self::NonFiniteInput { index } => write!(f, "non-finite input at index {index}"),
             Self::AllocationFailure => f.write_str("requested memory capacity is unavailable"),
             Self::NumericalFailure => {
-                f.write_str("numerical rank deficiency, unrepresentable scaling or result, or non-finite arithmetic")
+                f.write_str("numerical rank deficiency, unrepresentable scaling or result, non-finite arithmetic, or values beyond the supported range")
             }
         }
     }

@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the range of normal `f64` numbers, instead of rescaling internally.
 - `Detrend` no longer rescales internally. Results are unchanged except for
   subnormal inputs below about 2.2e-308, which lose a little precision.
+- The message of `Error::NumericalFailure` also names values beyond the
+  supported range.
 
 ### Removed
 

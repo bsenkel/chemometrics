@@ -32,9 +32,13 @@ Use Rust 2024, maintain Rust 1.85 compatibility, and follow rustfmt's four-space
 
 Keep the default library dependency-free and independent of file formats. Preserve slice-based `f64` inputs, reusable immutable filters, and allocation-free `apply_into`. Keep numerical helpers private. Matrix dependencies stay optional and internal, reached only through `src/numeric.rs`, and never appear in the public API; avoid speculative traits and placeholder features.
 
+## Numerical Contract
+
+The crate is built for measured spectra. Methods must process values between about 1e-150 and 1e150 without overflow or underflow. Beyond that range, return `Error::NumericalFailure` wherever a result would overflow or lose most of its digits, rather than a wrong value; subnormal inputs follow IEEE 754 gradual underflow. Make an edge case succeed only if measured data can produce it; otherwise reject it with `Error::NumericalFailure` instead of adding rescaling or other machinery to handle it. Keep the measures that matter for real spectra: compensated summation, two-pass variance, subtracting a reference sample before centering, and orthogonal factorizations instead of normal equations.
+
 ## Testing Guidelines
 
-Use Rust's built-in test framework with descriptive names such as `polynomial_preservation_including_edges`. Cover mathematical invariants, edge windows, invalid inputs, buffer preservation, reuse, and numerical failures. There is no percentage coverage threshold.
+Use Rust's built-in test framework with descriptive names such as `polynomial_preservation_including_edges`. Cover mathematical invariants, edge windows, invalid inputs, buffer preservation, reuse, and numerical failures. Beyond the supported value range, test that methods fail cleanly or stay correct, not that they succeed. There is no percentage coverage threshold.
 
 Compare reference values using the existing absolute-plus-relative tolerance. SciPy fixtures use version 1.18.1, with `mode="interp"` for Savitzky–Golay, `zscore(x, ddof=1)` for SNV and NumPy `polyfit` residuals for detrending; regenerate with `uv run tests/fixtures/generate.py`, `uv run tests/fixtures/generate_derivatives.py`, `uv run tests/fixtures/generate_normalization.py`, `uv run tests/fixtures/generate_baseline.py` and `uv run tests/fixtures/generate_pca.py`, which install the pinned dependencies declared inline in each script (PEP 723). The PCA fixture uses NumPy and is cross-checked against scikit-learn inside the generator. After changing a generator, rerun it and confirm the fixture diff is empty unless new reference data is intended. Review fixture changes independently of implementation changes. Normal Rust tests require no Python. CI covers Linux, macOS, Windows, and the MSRV.
 
