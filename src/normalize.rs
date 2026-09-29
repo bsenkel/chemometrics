@@ -1,4 +1,4 @@
-//! Per-spectrum normalization of `f64` signals.
+//! Per-spectrum normalization.
 //!
 //! Each spectrum is transformed on its own, without reference to other spectra
 //! or to an x-axis. Output length and sample order are preserved.
@@ -15,11 +15,9 @@ use crate::{Error, numeric};
 ///
 /// SNV removes multiplicative scaling and constant offsets: for `a > 0`,
 /// `a * x + b` gives the same result as `x`, and `a < 0` flips its sign. A
-/// sloping baseline is not removed. A constant spectrum has no scale to divide
-/// by and yields zeros. At least two samples are required.
-///
-/// Application takes O(n) time. The transformation has no parameters, so one
-/// value processes spectra of any length.
+/// sloping baseline is not removed; [`Detrend`](crate::baseline::Detrend) does
+/// that. A constant spectrum has no scale to divide by and yields zeros. At
+/// least two samples are required. Application takes O(n) time.
 ///
 /// # Examples
 /// ```
@@ -54,8 +52,7 @@ impl StandardNormalVariate {
     /// [`Error::OutputLengthMismatch`] for a buffer of different length and
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
     /// Returns [`Error::NumericalFailure`] if the deviations from the mean lie
-    /// beyond roughly 1e±150, so that their squares leave the range of normal
-    /// numbers, or if a result is not finite.
+    /// beyond about 1e±150.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         numeric::validate(input, output.len(), 2)?;
         normalize(input, output)
