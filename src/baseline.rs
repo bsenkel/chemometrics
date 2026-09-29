@@ -1,4 +1,4 @@
-//! Baseline correction of `f64` spectra.
+//! Baseline correction.
 //!
 //! Each spectrum is corrected on its own, without reference to other spectra.
 //! Output length and sample order are preserved.
@@ -28,30 +28,28 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
 
 /// Detrending: subtracts the least-squares polynomial fitted to a whole spectrum.
 ///
-/// The fit uses the sample position as its coordinate, scaled to `[-1, 1]`, and
-/// the result is the residual. Under uniform sampling this is the same fit as
-/// over the wavelength axis, ascending or descending, so no x values are needed.
+/// The fit runs over the sample positions, which under uniform sampling gives
+/// the same result as over the wavelength axis, ascending or descending, so no
+/// x values are needed.
 ///
-/// Order 0 subtracts the mean, order 1 a straight line and order 2 a parabola.
-/// Order 2 is the detrending step that follows
-/// [`StandardNormalVariate`](crate::normalize::StandardNormalVariate) in Barnes,
+/// Order 0 subtracts the mean, order 1 a straight line and order 2 a parabola;
+/// orders 0 and 1 match `scipy.signal.detrend` with `type="constant"` and
+/// `type="linear"`. Order 2 after
+/// [`StandardNormalVariate`](crate::normalize::StandardNormalVariate) is Barnes,
 /// Dhanoa and Lister's SNV and Detrend, the usual treatment of scatter and
-/// curved baselines in near-infrared spectra. Orders 0 and 1 match
-/// `scipy.signal.detrend` with `type="constant"` and `type="linear"`.
+/// curved baselines in near-infrared spectra.
 ///
 /// Every polynomial up to the fitted order is removed exactly, so adding one to
 /// a spectrum does not change the result. Strong bands pull the fit towards
-/// themselves and are therefore damped along with the baseline; low orders limit
-/// this. Orders above roughly 3 fit band structure rather than a baseline, and
-/// orders of a few dozen degrees fail with [`Error::NumericalFailure`]; that
-/// limit falls as a spectrum grows longer.
+/// themselves and are damped along with the baseline; low orders limit this,
+/// and orders above roughly 3 fit band structure rather than a baseline. Very
+/// high orders fail with [`Error::NumericalFailure`].
 /// [`SavitzkyGolay`](crate::smooth::SavitzkyGolay) derivatives are the
 /// alternative without a baseline model: the first removes offsets and the
 /// second also removes slopes.
 ///
-/// A spectrum needs at least `order + 1` samples. With exactly that many, the
-/// polynomial passes through every sample and the result is zeros. Application
-/// takes O(n × order²) time; one value corrects spectra of any length.
+/// A spectrum needs at least `order + 1` samples; with exactly that many, the
+/// result is zeros. Application takes O(n × order²) time.
 ///
 /// # Examples
 /// ```
@@ -103,8 +101,8 @@ impl Detrend {
     /// Returns [`Error::TooFewSamples`] for fewer than `order + 1` samples,
     /// [`Error::OutputLengthMismatch`] for a buffer of different length and
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
-    /// Returns [`Error::NumericalFailure`] if the basis is numerically rank
-    /// deficient or a result is not finite.
+    /// Returns [`Error::NumericalFailure`] if the order is too high to fit
+    /// numerically or a result overflows.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         numeric::validate(input, output.len(), self.minimum_length())?;
         self.correct(input, output)
