@@ -45,7 +45,7 @@ Compare reference values using the existing absolute-plus-relative tolerance. Sc
 ## Conventions
 
 - Follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
-- Follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification. The history uses `feat:`, `fix:`, `docs:`, `test:` and `build:` prefixes; only the initial commit predates the convention.
+- Follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification and mark breaking changes with `!`; only the initial commit predates it.
 - Follow the [Semantic Versioning](https://semver.org/) specification.
 - Keep commits focused.
 - Update `CHANGELOG.md` after every meaningful change (new features, bug fixes, breaking changes, deprecations, removals).
