@@ -8,21 +8,25 @@
 //! ```
 //! use chemometrics::pca::Pca;
 //!
-//! // Four spectra of three wavelengths each, row-major.
-//! let data = [
-//!     1.0, 2.0, 3.0,
-//!     2.0, 4.1, 6.0,
-//!     3.0, 5.9, 9.0,
-//!     4.0, 8.0, 12.0,
+//! // Reference spectra at five wavelengths, one row per spectrum: a single
+//! // band whose height follows the concentration.
+//! let wavelengths = 5;
+//! let references = [
+//!     0.10, 0.31, 0.50, 0.29, 0.10,
+//!     0.12, 0.36, 0.61, 0.36, 0.11,
+//!     0.16, 0.45, 0.75, 0.44, 0.15,
+//!     0.17, 0.52, 0.85, 0.51, 0.17,
+//!     0.20, 0.60, 0.99, 0.61, 0.20,
 //! ];
-//! let model = Pca::fit(&data, 3, 2)?;
-//! println!("explained: {:?}", model.explained_variance_ratio());
+//! // One component describes the band.
+//! let model = Pca::fit(&references, wavelengths, 1)?;
 //!
-//! let projection = model.project(&[2.0, 4.0, 6.0])?;
-//! let diagnostics = projection.diagnostics;
-//! println!("T² {}, Q {}", diagnostics.hotelling_t2, diagnostics.q_residual);
-//! # assert_eq!(projection.scores.len(), 2);
-//! # assert!(model.explained_variance_ratio()[0] > 0.99);
+//! // A higher concentration than in the references stands out in T², an
+//! // unexpected band in Q.
+//! let high = model.project(&[0.32, 0.96, 1.60, 0.96, 0.32])?.diagnostics;
+//! let band = model.project(&[0.14, 0.42, 0.70, 0.52, 0.34])?.diagnostics;
+//! assert!(high.hotelling_t2 > 10.0 && high.q_residual < 0.01);
+//! assert!(band.hotelling_t2 < 1.0 && band.q_residual > 0.01);
 //! # Ok::<(), chemometrics::Error>(())
 //! ```
 //!
@@ -38,17 +42,14 @@
 //! # Centering and scaling
 //! The model mean-centers the data and keeps the leading components.
 //! [`Pca::fit`] does not scale individual variables, because spectral
-//! variables share one unit and autoscaling would amplify noise; autoscaling
-//! for other data is planned as a separate method.
+//! variables share one unit and autoscaling would amplify noise.
 //!
 //! # Wavelengths
-//! Wavelengths are not part of the input: the wavelength of column `j` is known
-//! only to the caller, so loadings are read against the caller's own axis. All
-//! spectra, including those passed to [`Pca::project`], must use the same
-//! wavelengths in the same order; a spectrum on another grid of the same length
-//! passes the length check, and the results then reflect the grid rather than
-//! the sample. Each column enters with equal weight, so a region sampled more
-//! densely counts for more; a uniform grid weights the range evenly.
+//! Wavelengths are not part of the input, so loadings are read against the
+//! caller's own axis. All spectra, including those passed to [`Pca::project`],
+//! must share one wavelength grid in the same order; the length check cannot
+//! detect a different grid. Each column counts equally, so a densely sampled
+//! region weighs more.
 use crate::{Error, numeric};
 use std::fmt;
 
@@ -60,7 +61,8 @@ use std::fmt;
 #[non_exhaustive]
 pub struct Diagnostics {
     /// Hotelling's T², the squared distance inside the component plane,
-    /// `Σ t²/λ` over the components.
+    /// `Σ t²/λ` over the components, with the eigenvalues λ of
+    /// [`Pca::eigenvalues`].
     ///
     /// With k components, n training spectra and significance level α, control
     /// limits for new spectra follow the F distribution:
@@ -88,31 +90,10 @@ pub struct Projection {
 
 /// A fitted principal component model.
 ///
-/// Fitting takes O(samples × variables × min(samples, variables)) time and runs
-/// on a single thread. At its peak it holds a few times the size of the data:
-/// the centered copy, the decomposition's working copies and its factors. The
-/// model keeps the mean, the loadings, the training scores and the variances,
-/// but not the data. `Debug` prints the shape and the eigenvalues only, since
-/// the buffers can hold millions of values.
-///
-/// # Examples
-/// ```
-/// use chemometrics::pca::Pca;
-/// // Five spectra of three wavelengths each, varying along one direction only.
-/// let data = [
-///     1.0, 2.0, 3.0,
-///     2.0, 4.0, 6.0,
-///     3.0, 6.0, 9.0,
-///     4.0, 8.0, 12.0,
-///     5.0, 10.0, 15.0,
-/// ];
-/// let model = Pca::fit(&data, 3, 1)?;
-/// // One component explains everything, so nothing is left over.
-/// assert!((model.explained_variance_ratio()[0] - 1.0).abs() < 1e-12);
-/// let projection = model.project(&[2.0, 4.0, 6.0])?;
-/// assert!(projection.diagnostics.q_residual < 1e-20);
-/// # Ok::<(), chemometrics::Error>(())
-/// ```
+/// Fitting takes O(samples × variables × min(samples, variables)) time on a
+/// single thread and temporarily needs a few times the memory of the data. The
+/// model keeps the mean, loadings, training scores and variances, but not the
+/// data; `Debug` prints only its shape and eigenvalues.
 #[derive(Clone)]
 pub struct Pca {
     samples: usize,
@@ -156,38 +137,15 @@ impl Pca {
     /// count, then non-finite values, in that order; the index in
     /// [`Error::NonFiniteInput`] refers to `data`, so the affected spectrum is
     /// `index / variables`. Returns [`Error::InsufficientRank`], with the
-    /// number of components the data support, if a requested component is not
-    /// distinguishable from rounding, so its direction would be arbitrary. A
-    /// singular value counts as rounding at or below
-    /// `f64::EPSILON · max(samples, variables) · ‖X‖_F`, with the norm of the
-    /// uncentered data, since centering cannot remove rounding smaller than the
-    /// values themselves. Returns [`Error::NumericalFailure`] for data beyond
-    /// roughly 1e±150, whose squares or retained variances leave the range of
-    /// normal numbers, and [`Error::AllocationFailure`] if the model or the
-    /// working memory cannot be reserved; allocations inside the
-    /// decomposition's matrix kernels may still abort on failure.
+    /// number of components the data support, if a requested component cannot
+    /// be told apart from rounding, so its direction would be arbitrary.
+    /// Returns [`Error::NumericalFailure`] for data beyond about 1e±150, and
+    /// [`Error::AllocationFailure`] if memory cannot be reserved; allocations
+    /// inside the decomposition may still abort on failure.
     ///
     /// # Examples
-    /// ```
-    /// use chemometrics::pca::Pca;
-    /// // Four spectra of two wavelengths each.
-    /// let data = [
-    ///     0.0, 1.0,
-    ///     1.0, 3.0,
-    ///     2.0, 5.0,
-    ///     3.0, 7.0,
-    /// ];
-    /// let model = Pca::fit(&data, 2, 1)?;
-    /// assert_eq!(model.samples(), 4);
-    /// assert_eq!(model.mean().len(), 2);
-    /// # Ok::<(), chemometrics::Error>(())
-    /// ```
-    ///
     /// Spectra preprocessed one at a time are written straight into the rows
-    /// of `data` with the `apply_into` methods. They reject a spectrum whose
-    /// length differs from `variables`; unless it is too short for the method
-    /// itself, the error is [`Error::OutputLengthMismatch`], whose `expected`
-    /// is the length of that spectrum, not `variables`:
+    /// of `data` with `apply_into`, which rejects a spectrum of another length:
     /// ```
     /// use chemometrics::{normalize::StandardNormalVariate, pca::Pca};
     /// // Three spectra of five wavelengths each.
@@ -207,9 +165,7 @@ impl Pca {
     /// ```
     ///
     /// Spectra that already exist as separate vectors can be joined with
-    /// `concat`, at the cost of an extra copy. `concat` does not check that all
-    /// spectra have the same length; `fit` notices only a total length that is
-    /// not a multiple of `variables`.
+    /// `concat`, which does not check that they have the same length.
     pub fn fit(data: &[f64], variables: usize, components: usize) -> Result<Self, Error> {
         let samples = samples_of(data.len(), variables)?;
         if samples < 2 {
@@ -322,13 +278,11 @@ impl Pca {
 
     /// All loading vectors, `components` × `variables` row-major.
     ///
-    /// The loadings are orthonormal. The sign of a component is fixed so that
-    /// its largest-magnitude loading is positive. Loadings within a relative
-    /// `√ε` (about 1.5e-8) of the largest count as equally large and the first
-    /// of them decides, so rounding cannot flip a component whose largest
-    /// loadings are equal in magnitude. Components with nearly equal
-    /// eigenvalues are not determined by the data and may differ between
-    /// platforms or library versions.
+    /// The loadings are orthonormal. Each component's sign is fixed so that its
+    /// largest loading is positive; among loadings equal up to rounding, the
+    /// first decides. Components with nearly equal eigenvalues are not
+    /// determined by the data and may differ between platforms or library
+    /// versions.
     pub fn loadings(&self) -> &[f64] {
         &self.loadings
     }
@@ -348,7 +302,11 @@ impl Pca {
         self.scores.chunks_exact(self.components).nth(sample)
     }
 
-    /// Variance of each component's training scores, using `samples − 1`.
+    /// Variance of each component's training scores, with divisor
+    /// `samples − 1` as in scikit-learn's `explained_variance_`.
+    ///
+    /// Tools that divide by `samples` instead report eigenvalues smaller, and
+    /// T² values larger, by the factor `samples / (samples − 1)`.
     pub fn eigenvalues(&self) -> &[f64] {
         &self.eigenvalues[..self.components]
     }
@@ -360,18 +318,15 @@ impl Pca {
     /// Jackson–Mudholkar limit for Q, and divided by [`Pca::total_variance`]
     /// they show how much further components would explain. Preprocessing such
     /// as SNV or detrending removes directions from the data, so trailing
-    /// eigenvalues can be rounding rather than variation: those at or below
-    /// the square of the rounding bound described on [`Pca::fit`], divided by
-    /// `samples − 1`. Eigenvalues far below the largest may underflow to zero.
+    /// eigenvalues can be pure rounding.
     pub fn all_eigenvalues(&self) -> &[f64] {
         &self.eigenvalues
     }
 
-    /// Share of the total variance carried by each component.
+    /// Share of the total variance carried by each retained component.
     ///
-    /// The total is the variance of the centered data over all variables, not
-    /// only the part the retained components cover, so the shares sum to one,
-    /// up to rounding, when every component is retained.
+    /// The total covers all variables, so the shares sum to one only when every
+    /// component is retained.
     pub fn explained_variance_ratio(&self) -> &[f64] {
         &self.ratios
     }
