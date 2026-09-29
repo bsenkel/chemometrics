@@ -70,7 +70,9 @@ pub(crate) fn rank_tolerance(rows: usize, columns: usize, norm: f64) -> f64 {
     f64::EPSILON * rows.max(columns) as f64 * norm
 }
 
-// All evaluation rows, flattened row-major: each row is one filter kernel.
+/// Savitzky–Golay coefficients, flattened row-major: row `p` holds the
+/// `window` weights that evaluate the `derivative`-th derivative of the
+/// least-squares polynomial of degree `order` at window position `p`.
 pub(crate) fn kernels(
     window: usize,
     order: usize,
@@ -92,85 +94,58 @@ pub(crate) fn kernels(
     check_capacity::<f64>(kernel_size)?;
     check_capacity::<Vec<f64>>(columns)?;
     let mut result = reserved(kernel_size)?;
-    let mut a = zeros(size)?;
+    // Positions scaled to [-1, 1] keep the design matrix well conditioned, so
+    // higher orders still pass the rank check.
     let coordinate = |i: usize| 2.0 * i as f64 / (window - 1) as f64 - 1.0;
+    // The design matrix, column-major so that each column is one slice: column
+    // `j` holds `x^j` at every window position.
+    let mut a = zeros(size)?;
+    let mut norm = 0.0_f64;
     for i in 0..window {
         let x = coordinate(i);
         let mut power = 1.0;
         for j in 0..columns {
-            a[i * columns + j] = power;
+            a[j * window + i] = power;
+            norm = norm.hypot(power);
             power *= x;
         }
     }
-    let norm = a.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
-    let tolerance = rank_tolerance(window, columns, norm);
-    let mut reflectors = reserved(columns)?;
-    for k in 0..columns {
-        let norm = (k..window).fold(0.0_f64, |norm, i| norm.hypot(a[i * columns + k]));
-        if !norm.is_finite() || norm <= tolerance {
-            return Err(Error::NumericalFailure);
-        }
-        let alpha = -norm.copysign(a[k * columns + k]);
-        let mut v = reserved(window - k)?;
-        v.extend((k..window).map(|i| a[i * columns + k]));
-        v[0] -= alpha;
-        let vnorm = v.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
-        for x in &mut v {
-            *x /= vnorm;
-        }
-        for j in k..columns {
-            let dot = sum(v
-                .iter()
-                .enumerate()
-                .map(|(r, x)| x * a[(k + r) * columns + j]));
-            for (r, x) in v.iter().enumerate() {
-                a[(k + r) * columns + j] -= 2.0 * x * dot;
-            }
-        }
-        a[k * columns + k] = alpha;
-        reflectors.push(v);
+    let reflectors = householder_qr(
+        &mut a,
+        window,
+        columns,
+        rank_tolerance(window, columns, norm),
+    )?;
+    let scale = derivative_scale(window, derivative, spacing)?;
+    // The derivative of x^j is j!/(j − d)! · x^(j − d). The factors do not
+    // depend on the position, and entries of `basis` below `derivative` stay
+    // zero.
+    let mut factors = zeros(columns)?;
+    for (j, factor) in factors.iter_mut().enumerate().skip(derivative) {
+        *factor = (0..derivative).fold(1.0, |value, k| value * (j - k) as f64);
     }
-    // Divide in this order to avoid overflowing (window - 1) * spacing.
-    let mut scale = 1.0;
-    if derivative > 0 {
-        let step = (2.0 / (window - 1) as f64) / spacing;
-        for _ in 0..derivative {
-            scale *= step;
-        }
-        if !scale.is_finite() || scale == 0.0 {
-            return Err(Error::NumericalFailure);
-        }
-    }
+    let mut basis = zeros(columns)?;
     // Reused across positions; entries beyond `columns` must start at zero.
     let mut weights = zeros(window)?;
     for position in 0..window {
-        // Solve R^T z = evaluation basis, then compute Q z.
-        weights.fill(0.0);
         let x = coordinate(position);
         let mut power = 1.0;
+        for (value, factor) in basis.iter_mut().zip(&factors).skip(derivative) {
+            *value = factor * power;
+            power *= x;
+        }
+        // The weights are Q R⁻ᵀ b: solve Rᵀ z = b, then apply Q to z.
+        weights.fill(0.0);
         for j in 0..columns {
-            let previous = sum((0..j).map(|k| a[k * columns + j] * weights[k]));
-            let basis = if j < derivative {
-                0.0
-            } else {
-                let factor = (0..derivative).fold(1.0, |value, k| value * (j - k) as f64);
-                let basis = factor * power;
-                power *= x;
-                basis
-            };
-            weights[j] = (basis - previous) / a[j * columns + j];
+            let column = &a[j * window..j * window + j];
+            let previous = sum(column.iter().zip(&weights).map(|(r, z)| r * z));
+            weights[j] = (basis[j] - previous) / a[j * window + j];
         }
-        for k in (0..columns).rev() {
-            let v = &reflectors[k];
-            let dot = sum(v.iter().enumerate().map(|(r, x)| x * weights[k + r]));
-            for (r, x) in v.iter().enumerate() {
-                weights[k + r] -= 2.0 * x * dot;
-            }
+        for (k, v) in reflectors.iter().enumerate().rev() {
+            apply_reflection(v, &mut weights[k..]);
         }
-        if derivative > 0 {
-            for weight in &mut weights {
-                *weight *= scale;
-            }
+        for weight in &mut weights {
+            *weight *= scale;
         }
         if weights.iter().any(|x| !x.is_finite()) {
             return Err(Error::NumericalFailure);
@@ -178,6 +153,64 @@ pub(crate) fn kernels(
         result.extend_from_slice(&weights);
     }
     Ok(result)
+}
+
+/// Factorizes the column-major `rows` × `columns` matrix `a` as `Q R` with
+/// Householder reflections. Afterwards `a` holds `R` in its upper triangle, and
+/// `Q` is the product of the returned reflections, first to last.
+///
+/// Returns [`Error::NumericalFailure`] if a diagonal entry of `R` is not finite
+/// or falls to `tolerance`, where a column no longer adds a direction of its
+/// own, and [`Error::AllocationFailure`] if the reflections cannot be reserved.
+fn householder_qr(
+    a: &mut [f64],
+    rows: usize,
+    columns: usize,
+    tolerance: f64,
+) -> Result<Vec<Vec<f64>>, Error> {
+    let mut reflectors = reserved(columns)?;
+    for k in 0..columns {
+        let column = &a[k * rows + k..(k + 1) * rows];
+        let norm = column.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
+        if !norm.is_finite() || norm <= tolerance {
+            return Err(Error::NumericalFailure);
+        }
+        // The sign opposite to the diagonal avoids cancellation in `v[0]`.
+        let alpha = -norm.copysign(column[0]);
+        let mut v = reserved(rows - k)?;
+        v.extend_from_slice(column);
+        v[0] -= alpha;
+        let vnorm = v.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
+        for x in &mut v {
+            *x /= vnorm;
+        }
+        for j in k..columns {
+            apply_reflection(&v, &mut a[j * rows + k..(j + 1) * rows]);
+        }
+        a[k * rows + k] = alpha;
+        reflectors.push(v);
+    }
+    Ok(reflectors)
+}
+
+/// Applies the reflection `I − 2 v vᵀ`, with `v` of unit length, to `values`.
+fn apply_reflection(v: &[f64], values: &mut [f64]) {
+    let dot = sum(v.iter().zip(values.iter()).map(|(x, y)| x * y));
+    for (x, y) in v.iter().zip(values) {
+        *y -= 2.0 * x * dot;
+    }
+}
+
+/// Factor that turns derivatives along the fit coordinate in [-1, 1] into
+/// derivatives per unit of x, where adjacent samples lie `spacing` apart.
+fn derivative_scale(window: usize, derivative: usize, spacing: f64) -> Result<f64, Error> {
+    // Divide in this order to avoid overflowing (window - 1) * spacing.
+    let step = (2.0 / (window - 1) as f64) / spacing;
+    let scale = (0..derivative).fold(1.0, |scale, _| scale * step);
+    if !scale.is_finite() || scale == 0.0 {
+        return Err(Error::NumericalFailure);
+    }
+    Ok(scale)
 }
 
 /// Thin singular value decomposition of a row-major matrix, with the factors
@@ -283,10 +316,29 @@ mod tests {
     }
 
     #[test]
-    fn known_center_kernel() {
-        let k = kernels(5, 2, 0, 1.0).unwrap();
-        for (actual, expected) in k[10..15].iter().zip([-3.0, 12.0, 17.0, 12.0, -3.0]) {
-            assert!((actual - expected / 35.0).abs() < 1e-12);
+    fn known_kernels_are_exact_to_rounding() {
+        // Classic quadratic coefficients for window 5: the centre and the left
+        // edge of the smoother, and the centre of the first derivative.
+        let smooth = kernels(5, 2, 0, 1.0).unwrap();
+        let derivative = kernels(5, 2, 1, 1.0).unwrap();
+        for (row, expected) in [
+            (
+                &smooth[10..15],
+                [-3.0, 12.0, 17.0, 12.0, -3.0].map(|x| x / 35.0),
+            ),
+            (
+                &smooth[0..5],
+                [31.0, 9.0, -3.0, -5.0, 3.0].map(|x| x / 35.0),
+            ),
+            (
+                &derivative[10..15],
+                [-2.0, -1.0, 0.0, 1.0, 2.0].map(|x| x / 10.0),
+            ),
+        ] {
+            for (actual, expected) in row.iter().zip(expected) {
+                let error = (actual - expected).abs();
+                assert!(error <= 4.0 * f64::EPSILON, "{actual} != {expected}");
+            }
         }
     }
     #[test]
