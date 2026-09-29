@@ -28,11 +28,12 @@
 //!
 //! # Data layout
 //! Spectra are passed as one flat row-major slice: row `i` holds the
-//! `variables` intensities of sample `i`. Spectra preprocessed one at a time
-//! are written into such a slice with `apply_into`, as [`Pca::fit`] shows.
-//! Column-major matrices, such as nalgebra's `DMatrix`, must be transposed
-//! first; a slice of the same length in the wrong order cannot be detected
-//! and gives a meaningless model.
+//! `variables` intensities of sample `i`, as in a C-ordered NumPy array or a
+//! row-major `ndarray` view. Spectra preprocessed one at a time are written
+//! into such a slice with `apply_into`, as [`Pca::fit`] shows. Column-major
+//! matrices, such as nalgebra's `DMatrix` or Fortran-ordered NumPy arrays, must
+//! be transposed first; a slice of the same length in the wrong order cannot be
+//! detected and gives a meaningless model.
 //!
 //! # Centering and scaling
 //! The model mean-centers the data and keeps the leading components.

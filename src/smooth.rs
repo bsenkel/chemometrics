@@ -103,6 +103,8 @@ impl MovingAverage {
 
 /// Savitzky–Golay smoothing and differentiation with polynomial evaluation at the edges.
 ///
+/// Matches SciPy's `savgol_filter` with `mode="interp"`.
+///
 /// Fits use coordinates scaled to [-1, 1] and Householder QR. A diagonal
 /// magnitude at or below `f64::EPSILON * max(rows, columns) * ||A||_F`
 /// is treated as numerical rank deficiency. High polynomial orders can fail

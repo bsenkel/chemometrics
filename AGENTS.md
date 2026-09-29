@@ -11,7 +11,7 @@
 - `cargo run --locked --features pca --example pca`: run the principal component example.
 - `cargo test --locked --all-targets`: run unit and integration tests and compile examples.
 - `cargo test --locked --all-features --all-targets`: the same including the optional `pca` feature.
-- `cargo test --locked --doc`: test documentation examples, including the README.
+- `cargo test --locked --all-features --doc`: test documentation examples, including the README, whose examples need the `pca` feature.
 - `cargo +1.85 test --locked --all-features --all-targets`: check the minimum supported Rust version when that toolchain is installed.
 - `cargo fmt --all -- --check`: verify formatting; use `cargo fmt --all` to apply it.
 - `cargo clippy --locked --all-features --all-targets -- -D warnings`: reject lint warnings.

@@ -29,5 +29,5 @@ pub mod smooth;
 pub use error::Error;
 
 #[doc = include_str!("../README.md")]
-#[cfg(doctest)]
+#[cfg(all(doctest, feature = "pca"))]
 struct ReadmeDoctests;

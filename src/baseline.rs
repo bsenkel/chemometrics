@@ -45,6 +45,9 @@ fn gram(degree: usize, coordinate: f64, count: f64) -> f64 {
 /// this. Orders above roughly 3 fit band structure rather than a baseline, and
 /// orders of a few dozen degrees fail with [`Error::NumericalFailure`]; that
 /// limit falls as a spectrum grows longer.
+/// [`SavitzkyGolay`](crate::smooth::SavitzkyGolay) derivatives are the
+/// alternative without a baseline model: the first removes offsets and the
+/// second also removes slopes.
 ///
 /// A spectrum needs at least `order + 1` samples. With exactly that many, the
 /// polynomial passes through every sample and the result is zeros. Application
