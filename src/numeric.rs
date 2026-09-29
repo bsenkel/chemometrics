@@ -1,6 +1,6 @@
-// Private numerical helpers shared by the public modules: least squares, sample
-// scaling, validation, buffers and the thin SVD adapter; intentionally not a
-// general matrix API.
+// Private numerical helpers shared by the public modules: least squares,
+// validation, buffers and the thin SVD adapter; intentionally not a general
+// matrix API.
 use crate::Error;
 
 fn check_capacity<T>(length: usize) -> Result<(), Error> {
@@ -40,22 +40,6 @@ pub(crate) fn sum(values: impl Iterator<Item = f64>) -> f64 {
     total
 }
 
-/// Largest power of two not above a positive, finite `magnitude`.
-///
-/// Division by a power of two is exact whenever the quotient is a normal
-/// number. Only samples many orders of magnitude below the largest one can
-/// round, and their contribution to the result is negligible.
-fn power_of_two_floor(magnitude: f64) -> f64 {
-    let bits = magnitude.to_bits();
-    let exponent = bits & (0x7ff << 52);
-    if exponent == 0 {
-        // Subnormal: keep only the highest set mantissa bit.
-        f64::from_bits(1 << (63 - bits.leading_zeros()))
-    } else {
-        f64::from_bits(exponent)
-    }
-}
-
 /// Checks a signal and its output buffer for the filters and per-spectrum
 /// transforms.
 ///
@@ -84,64 +68,6 @@ pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Resu
 /// below it is rounding rather than information.
 pub(crate) fn rank_tolerance(rows: usize, columns: usize, norm: f64) -> f64 {
     f64::EPSILON * rows.max(columns) as f64 * norm
-}
-
-/// Divides samples by a power of two near their largest magnitude and
-/// subtracts the scaled first sample.
-///
-/// Scaled samples lie in (-2, 2) and their offsets in (-4, 4), so sums and
-/// squares stay finite near `f64::MAX` and representable for subnormal
-/// spectra. Samples within a factor of two of the first one differ exactly
-/// (Sterbenz lemma), so a large offset cannot round away a small variation.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Shift {
-    pub(crate) scale: Scale,
-    reference: f64,
-}
-
-/// Power-of-two divisor that maps the largest magnitude of a sample set into
-/// [1, 2), or `1.0` when every sample is zero.
-///
-/// Dividing by it is exact, so scaled results are restored without error.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Scale {
-    factor: f64,
-}
-
-impl Scale {
-    /// Assumes `values` is finite.
-    pub(crate) fn new(values: &[f64]) -> Self {
-        let magnitude = values.iter().fold(0.0_f64, |a, b| a.max(b.abs()));
-        let factor = if magnitude == 0.0 {
-            1.0
-        } else {
-            power_of_two_floor(magnitude)
-        };
-        Self { factor }
-    }
-
-    pub(crate) fn divide(self, x: f64) -> f64 {
-        x / self.factor
-    }
-
-    pub(crate) fn restore(self, x: f64) -> f64 {
-        x * self.factor
-    }
-}
-
-impl Shift {
-    /// Assumes `input` is nonempty and finite.
-    pub(crate) fn new(input: &[f64]) -> Self {
-        let scale = Scale::new(input);
-        Self {
-            scale,
-            reference: scale.divide(input[0]),
-        }
-    }
-
-    pub(crate) fn apply(self, x: f64) -> f64 {
-        self.scale.divide(x) - self.reference
-    }
 }
 
 // All evaluation rows, flattened row-major: each row is one filter kernel.
@@ -334,41 +260,6 @@ pub(crate) fn thin_svd(
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn power_of_two_floor_boundaries() {
-        let largest_subnormal = f64::from_bits((1 << 52) - 1);
-        for (magnitude, expected) in [
-            (1.0, 1.0),
-            (1.5, 1.0),
-            (0.75, 0.5),
-            (3.0, 2.0),
-            (f64::MAX, f64::from_bits(0x7fe << 52)),
-            (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
-            (largest_subnormal, f64::from_bits(1 << 51)),
-            (f64::from_bits(3), f64::from_bits(2)),
-            (f64::from_bits(7), f64::from_bits(4)),
-            (f64::from_bits(1 << 40), f64::from_bits(1 << 40)),
-            (f64::from_bits(1), f64::from_bits(1)),
-            (f64::from_bits((1 << 52) + 12_345), f64::MIN_POSITIVE),
-            (f64::from_bits(0x3ff0_0000_0000_0001), 1.0),
-            (
-                f64::from_bits(0x7fef_ffff_ffff_fffe),
-                f64::from_bits(0x7fe << 52),
-            ),
-        ] {
-            assert_eq!(power_of_two_floor(magnitude), expected, "{magnitude:e}");
-        }
-    }
-
-    #[test]
-    fn shift_scales_by_a_power_of_two_and_subtracts_the_first_sample() {
-        assert_eq!(Shift::new(&[0.0, -0.0]).scale.restore(1.0), 1.0);
-        let shift = Shift::new(&[0.5, -3.0]);
-        assert_eq!(shift.scale.restore(1.0), 2.0);
-        assert_eq!(shift.apply(0.5), 0.0);
-        assert_eq!(shift.apply(-3.0), -1.75);
-    }
-
     #[test]
     fn rejects_impossible_byte_capacity_without_allocating() {
         assert_eq!(

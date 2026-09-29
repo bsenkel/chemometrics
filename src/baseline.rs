@@ -114,11 +114,10 @@ impl Detrend {
     /// Assumes `validate` already accepted these slices.
     fn correct(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         let count = input.len() as f64;
-        // The fit removes constants, so subtracting the shift's reference
-        // sample leaves the result unchanged.
-        let shift = numeric::Shift::new(input);
+        // The fit removes constants, so subtracting the first sample leaves
+        // the result unchanged and keeps a small variation on a large offset.
         for (out, x) in output.iter_mut().zip(input) {
-            *out = shift.apply(*x);
+            *out = x - input[0];
         }
         // A single sample only allows order 0, which ignores the coordinate;
         // this keeps it finite instead of dividing zero by zero.
@@ -148,11 +147,8 @@ impl Detrend {
                 *out -= projection * basis(i);
             }
         }
-        for out in output.iter_mut() {
-            *out = shift.scale.restore(*out);
-            if !out.is_finite() {
-                return Err(Error::NumericalFailure);
-            }
+        if output.iter().any(|x| !x.is_finite()) {
+            return Err(Error::NumericalFailure);
         }
         Ok(())
     }

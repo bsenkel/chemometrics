@@ -53,7 +53,9 @@ impl StandardNormalVariate {
     /// Returns [`Error::TooFewSamples`] for fewer than two samples,
     /// [`Error::OutputLengthMismatch`] for a buffer of different length and
     /// [`Error::NonFiniteInput`] for NaN or infinity, checked in that order.
-    /// Returns [`Error::NumericalFailure`] if a result is not finite.
+    /// Returns [`Error::NumericalFailure`] if the deviations from the mean lie
+    /// beyond roughly 1e±150, so that their squares leave the range of normal
+    /// numbers, or if a result is not finite.
     pub fn apply_into(&self, input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         numeric::validate(input, output.len(), 2)?;
         normalize(input, output)
@@ -62,8 +64,16 @@ impl StandardNormalVariate {
 
 /// Assumes `validate` already accepted these slices.
 fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
-    let shift = numeric::Shift::new(input);
-    let shifted = |x: &f64| shift.apply(*x);
+    let first = input[0];
+    // Tested by equality, since a variance of zero can also come from squared
+    // deviations that underflowed.
+    if input.iter().all(|x| *x == first) {
+        output.fill(0.0);
+        return Ok(());
+    }
+    // Deviations from the first sample are exact for samples within a factor
+    // of two of it, so a large offset cannot round away a small variation.
+    let shifted = |x: &f64| x - first;
     let count = input.len() as f64;
     let mean = numeric::sum(input.iter().map(shifted)) / count;
     // Two passes instead of mean(y²) - mean(y)², which cancels most digits
@@ -72,11 +82,10 @@ fn normalize(input: &[f64], output: &mut [f64]) -> Result<(), Error> {
         let deviation = shifted(x) - mean;
         deviation * deviation
     })) / (count - 1.0);
-    if variance == 0.0 {
-        // Exact offsets leave zero variance only for a constant spectrum, which
-        // has no spread to divide by.
-        output.fill(0.0);
-        return Ok(());
+    // Squared deviations beyond the range of normal numbers leave no usable
+    // spread, or one that has lost most of its digits.
+    if !variance.is_normal() {
+        return Err(Error::NumericalFailure);
     }
     let standard_deviation = variance.sqrt();
     for (out, x) in output.iter_mut().zip(input) {

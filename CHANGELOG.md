@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose squares or retained variances leave the range of normal `f64` numbers,
   instead of rescaling internally. Within that range results are unchanged or,
   for T², slightly more precise.
+- `StandardNormalVariate` returns `Error::NumericalFailure` for spectra whose
+  deviations from the mean lie beyond roughly 1e±150, where their squares leave
+  the range of normal `f64` numbers, instead of rescaling internally.
+- `Detrend` no longer rescales internally. Results are unchanged except for
+  subnormal inputs below about 2.2e-308, which lose a little precision.
 
 ### Removed
 
