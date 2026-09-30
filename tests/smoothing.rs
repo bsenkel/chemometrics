@@ -5,11 +5,15 @@ use chemometrics::{
 };
 
 fn close(actual: &[f64], expected: &[f64]) {
-    assert_eq!(actual.len(), expected.len());
+    close_with(actual, expected, "");
+}
+
+fn close_with(actual: &[f64], expected: &[f64], context: impl std::fmt::Display) {
+    assert_eq!(actual.len(), expected.len(), "length{context}");
     for (i, (a, b)) in actual.iter().zip(expected).enumerate() {
         assert!(
-            a.is_finite() && (a - b).abs() <= 1e-10 + 1e-10 * b.abs(),
-            "index {i}: {a} != {b}"
+            a.is_finite() && b.is_finite() && (a - b).abs() <= 1e-10 + 1e-10 * b.abs(),
+            "index {i}{context}: {a} != {b}"
         );
     }
 }
@@ -169,49 +173,44 @@ fn scipy_reference() {
         if line.trim().is_empty() || line.starts_with('#') {
             continue;
         }
+        let row = line_number + 1;
         let parts: Vec<_> = line.split('|').collect();
-        assert_eq!(parts.len(), 4, "invalid fixture row {}", line_number + 1);
-        let context = format!(
-            "fixture row {}, window={}, order={}",
-            line_number + 1,
-            parts[0],
-            parts[1]
-        );
-        let parse = |s: &str| -> Vec<f64> {
-            s.split(',')
+        assert_eq!(parts.len(), 4, "fixture row {row}");
+        let number = |text: &str| -> usize {
+            text.parse()
+                .unwrap_or_else(|e| panic!("fixture row {row}: {e}"))
+        };
+        let values = |text: &str| -> Vec<f64> {
+            text.split(',')
                 .map(|x| {
                     x.parse()
-                        .unwrap_or_else(|e| panic!("{context}: invalid number: {e}"))
+                        .unwrap_or_else(|e| panic!("fixture row {row}: {e}"))
                 })
                 .collect()
         };
-        let window = parts[0]
-            .parse()
-            .unwrap_or_else(|e| panic!("{context}: invalid window: {e}"));
-        let order = parts[1]
-            .parse()
-            .unwrap_or_else(|e| panic!("{context}: invalid order: {e}"));
-        let filter = SavitzkyGolay::new(window, order).unwrap_or_else(|e| panic!("{context}: {e}"));
-        let actual = filter
-            .apply(&parse(parts[2]))
-            .unwrap_or_else(|e| panic!("{context}: {e}"));
-        let expected = parse(parts[3]);
-        assert_eq!(actual.len(), expected.len(), "{context}: length mismatch");
-        for (index, (a, b)) in actual.iter().zip(&expected).enumerate() {
-            assert!(
-                a.is_finite() && b.is_finite() && (a - b).abs() <= 1e-10 + 1e-10 * b.abs(),
-                "{context}, sample {index}: {a} != {b}"
-            );
-        }
+        let (window, order) = (number(parts[0]), number(parts[1]));
+        let actual = SavitzkyGolay::new(window, order)
+            .unwrap()
+            .apply(&values(parts[2]))
+            .unwrap();
+        close_with(
+            &actual,
+            &values(parts[3]),
+            format_args!(", fixture row {row}, window={window}, order={order}"),
+        );
         cases += 1;
     }
-    assert!(cases > 0, "SciPy fixture contains no reference cases");
+    assert_eq!(cases, 18, "missing SciPy reference cases");
 }
 
 #[test]
 fn impossible_sg_window_returns_allocation_error() {
-    assert!(matches!(
-        SavitzkyGolay::new(usize::MAX, 0),
-        Err(Error::AllocationFailure)
-    ));
+    // Order 0 overflows only the window² coefficients, order 2 already the
+    // window × (order + 1) design matrix.
+    for order in [0, 2] {
+        assert!(matches!(
+            SavitzkyGolay::new(usize::MAX, order),
+            Err(Error::AllocationFailure)
+        ));
+    }
 }

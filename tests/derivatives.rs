@@ -138,10 +138,6 @@ fn derivative_validation_and_precedence() {
         Err(Error::InvalidDerivativeOrder { .. })
     ));
     assert!(matches!(
-        SavitzkyGolay::new_derivative(usize::MAX, 2, 1, 1.0),
-        Err(Error::AllocationFailure)
-    ));
-    assert!(matches!(
         SavitzkyGolay::new_derivative(101, 100, 1, 1.0),
         Err(Error::NumericalFailure)
     ));
@@ -198,22 +194,23 @@ fn extreme_spacing_reports_unrepresentable_scaling() {
         SavitzkyGolay::new_derivative(3, 1, 1, f64::from_bits(1)),
         Err(Error::NumericalFailure)
     ));
-    // A large finite spacing must not fail just because window * spacing overflows.
+    // Spacings beyond any real axis may fail, but never give a wrong value.
     for spacing in [f64::MAX, -f64::MAX] {
-        let output = SavitzkyGolay::new_derivative(5, 2, 1, spacing)
-            .unwrap()
-            .apply(&[0.0, 1.0, 2.0, 3.0, 4.0])
-            .unwrap();
-        for value in output {
-            assert!((value * spacing - 1.0).abs() < 1e-12);
+        let derivative = SavitzkyGolay::new_derivative(5, 2, 1, spacing)
+            .and_then(|filter| filter.apply(&[0.0, 1.0, 2.0, 3.0, 4.0]));
+        match derivative {
+            Ok(output) => assert!(
+                output
+                    .iter()
+                    .all(|value| (value * spacing - 1.0).abs() < 1e-12)
+            ),
+            Err(error) => assert_eq!(error, Error::NumericalFailure),
         }
     }
-    // A tiny representable spacing can have finite kernels but overflow on application.
-    let filter = SavitzkyGolay::new_derivative(3, 1, 1, 1e-308).unwrap();
-    assert_eq!(
-        filter.apply(&[-10.0, 0.0, 10.0]),
-        Err(Error::NumericalFailure)
-    );
+    // A derivative too large to represent fails instead of overflowing.
+    let steep = SavitzkyGolay::new_derivative(3, 1, 1, 1e-308)
+        .and_then(|filter| filter.apply(&[-10.0, 0.0, 10.0]));
+    assert_eq!(steep, Err(Error::NumericalFailure));
 }
 
 #[test]

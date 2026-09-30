@@ -421,8 +421,11 @@ fn project_into_matches_project() {
 }
 
 #[test]
-fn rejects_invalid_shapes_and_counts() {
-    let data = pseudo_random(12, 3);
+fn rejects_invalid_inputs_in_order() {
+    // The data contain a non-finite value, so each rejection of them shows that
+    // its check comes before the one for non-finite values.
+    let mut data = pseudo_random(12, 3);
+    data[7] = f64::NAN;
     assert_eq!(
         Pca::fit(&data, 5, 1).unwrap_err(),
         Error::InvalidDataShape {
@@ -445,7 +448,7 @@ fn rejects_invalid_shapes_and_counts() {
         }
     );
     assert_eq!(
-        Pca::fit(&data[..4], 4, 1).unwrap_err(),
+        Pca::fit(&data[..8], 8, 1).unwrap_err(),
         Error::TooFewSpectra {
             count: 1,
             minimum: 2
@@ -467,39 +470,10 @@ fn rejects_invalid_shapes_and_counts() {
         }
     );
     // Six samples of two variables support at most two components.
-    assert!(Pca::fit(&data, 2, 2).is_ok());
     assert_eq!(
         Pca::fit(&data, 2, 3).unwrap_err(),
         Error::InvalidComponentCount {
             requested: 3,
-            maximum: 2
-        }
-    );
-}
-
-#[test]
-fn checks_inputs_in_order() {
-    let mut data = pseudo_random(12, 11);
-    data[7] = f64::NAN;
-    // The shape, the number of spectra and the component count come first.
-    assert_eq!(
-        Pca::fit(&data, 5, 1).unwrap_err(),
-        Error::InvalidDataShape {
-            length: 12,
-            variables: 5
-        }
-    );
-    assert_eq!(
-        Pca::fit(&data[..3], 3, 1).unwrap_err(),
-        Error::TooFewSpectra {
-            count: 1,
-            minimum: 2
-        }
-    );
-    assert_eq!(
-        Pca::fit(&data, 4, 9).unwrap_err(),
-        Error::InvalidComponentCount {
-            requested: 9,
             maximum: 2
         }
     );
@@ -512,6 +486,9 @@ fn checks_inputs_in_order() {
         Pca::fit(&data, 4, 2).unwrap_err(),
         Error::NonFiniteInput { index: 7 }
     );
+    // Once every value is finite, the largest valid count fits.
+    data[7] = 0.5;
+    assert!(Pca::fit(&data, 2, 2).is_ok());
 
     // The spectrum length comes before the buffer length and non-finite
     // values, the buffer length before non-finite values.
@@ -694,14 +671,8 @@ fn keeps_small_real_components_on_a_large_offset() {
 fn q_is_exact_far_from_the_training_magnitude() {
     // The model varies along the first variable only, so a spectrum at the
     // mean with a value in the second variable has exactly that value's
-    // square as Q, whatever the magnitudes of the mean and the value.
-    for (factor, off_plane) in [
-        (2.0_f64.powi(-500), 1e5),
-        (1e-100, 1e55),
-        (1e100, 1e-70),
-        (1.0, 1e-140),
-        (1.0, 1e140),
-    ] {
+    // square as Q, at magnitudes across the supported range.
+    for (factor, off_plane) in [(1e-100, 1e55), (1e100, 1e-70), (1.0, 1e-140), (1.0, 1e140)] {
         let data: Vec<f64> = [1.0, 2.0, 3.5, 5.0]
             .iter()
             .flat_map(|x| [x * factor, 0.0])

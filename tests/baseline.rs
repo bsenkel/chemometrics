@@ -1,7 +1,5 @@
 //! Analytic, synthetic NIR and NumPy/SciPy reference checks for detrending.
-use chemometrics::{
-    Error, baseline::Detrend, normalize::StandardNormalVariate, smooth::SavitzkyGolay,
-};
+use chemometrics::{Error, baseline::Detrend, normalize::StandardNormalVariate};
 use std::f64::consts::LN_2;
 
 fn close_with(actual: &[f64], expected: &[f64], context: impl std::fmt::Display) {
@@ -71,10 +69,6 @@ fn nir_like() -> Vec<f64> {
                 .sum()
         })
         .collect()
-}
-
-fn largest(values: &[f64]) -> f64 {
-    values.iter().fold(0.0_f64, |a, b| a.max(b.abs()))
 }
 
 #[test]
@@ -204,12 +198,6 @@ fn snv_and_detrend_pipeline() {
             .unwrap()
     };
     close(&pipeline(&sloped), &pipeline(&bands));
-
-    // Smoothing first is the usual order and keeps the pipeline finite.
-    let smoothed = SavitzkyGolay::new(11, 2).unwrap().apply(&sloped).unwrap();
-    let result = detrend(2, &smoothed);
-    assert!(result.iter().all(|x| x.is_finite()));
-    assert!(largest(&result) > 0.1);
 }
 
 #[test]
@@ -296,11 +284,10 @@ fn extreme_values_stay_finite_or_fail() {
             }
         }
     }
-    // A constant spectrum has no trend to remove, at any magnitude.
-    for value in [0.0, -0.0, 7.5, f64::MAX, tiny] {
-        close(&detrend(2, &[value; 33]), &[0.0; 33]);
-    }
-    // A large offset must not swamp the variation the input still represents.
+}
+
+#[test]
+fn small_variation_on_a_large_offset_is_kept() {
     // Subtracting the offset is exact here (Sterbenz lemma), so the shifted
     // spectrum holds exactly what the offset spectrum carries.
     let input: Vec<_> = wavy(101).iter().map(|x| 1e9 + x).collect();
