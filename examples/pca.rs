@@ -38,8 +38,14 @@ fn measure(size: f64, water: f64, stearate: f64, random: &mut impl FnMut() -> f6
 }
 
 /// 99 % limit of T² for a new lot and two components:
-/// `2(n²−1)/(n(n−2)) · F(2, n−2)`, whose F quantile has a closed form.
-fn t2_limit(n: f64) -> f64 {
+/// `2(n²−1)/(n(n−2)) · F(2, n−2)`, whose F quantile has a closed form. It
+/// assumes normally distributed variation; with the uniform variation of the
+/// lots below it is conservative.
+fn t2_limit(n: f64, components: usize) -> f64 {
+    assert_eq!(
+        components, 2,
+        "the closed form holds for two components only"
+    );
     let f = (n - 2.0) / 2.0 * (0.01_f64.powf(-2.0 / (n - 2.0)) - 1.0);
     2.0 * (n * n - 1.0) / (n * (n - 2.0)) * f
 }
@@ -60,7 +66,8 @@ fn q_limit(discarded: &[f64]) -> f64 {
 
 fn main() -> Result<(), chemometrics::Error> {
     // Pseudo-random numbers in [-1, 1) with a fixed seed, so every run prints
-    // the same.
+    // the same: a linear congruential generator with Knuth's MMIX constants,
+    // whose top 53 bits become the number.
     let mut state = 5_u64;
     let mut random = move || {
         state = state
@@ -78,7 +85,7 @@ fn main() -> Result<(), chemometrics::Error> {
         "Explained variance: {:.4?}",
         model.explained_variance_ratio()
     );
-    let limit_t2 = t2_limit(LOTS as f64);
+    let limit_t2 = t2_limit(LOTS as f64, COMPONENTS);
     let limit_q = q_limit(&model.all_eigenvalues()[COMPONENTS..]);
     println!("99 % limits: T² {limit_t2:.1}, Q {limit_q:.1e}\n");
 
