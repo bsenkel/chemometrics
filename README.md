@@ -104,8 +104,9 @@ to 1.7 and Q up to 0.00014. The high concentration stands out in T², as known
 variation beyond the usual range, and the unexpected band in Q, as variation
 the model does not describe.
 
-`cargo run --example preprocessing` and `cargo run --features pca --example pca`
-show complete workflows, the latter with control limits for T² and Q, and the
+`cargo run --example preprocessing` shows which disturbance each preprocessing
+step removes, `cargo run --features pca --example pca` a complete inspection
+with control limits for T² and Q, and the
 [API documentation](https://docs.rs/chemometrics) describes every method.
 
 ## Conventions
