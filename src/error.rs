@@ -58,6 +58,12 @@ pub enum Error {
         /// Number of components that stand out from rounding.
         supported: usize,
     },
+    /// A pure component spectrum is a mixture of the preceding ones up to
+    /// rounding, such as a duplicate, so its contribution would be arbitrary.
+    DependentSpectra {
+        /// Index of the first such spectrum.
+        index: usize,
+    },
     /// Signal contains fewer samples than the operation requires, such as
     /// fewer than one filter window.
     TooFewSamples {
@@ -123,6 +129,10 @@ impl fmt::Display for Error {
             } => write!(
                 f,
                 "component count {requested} exceeds the numerical rank {supported} of the data"
+            ),
+            Self::DependentSpectra { index } => write!(
+                f,
+                "pure spectrum {index} cannot be told apart from a mixture of the preceding ones"
             ),
             Self::TooFewSamples { length, minimum } => {
                 write!(f, "at least {minimum} samples are required, got {length}")
