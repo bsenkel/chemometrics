@@ -119,14 +119,6 @@ impl fmt::Debug for Pca {
     }
 }
 
-/// Number of samples in a row-major slice, or a shape error.
-fn samples_of(length: usize, variables: usize) -> Result<usize, Error> {
-    if variables == 0 || length == 0 || length % variables != 0 {
-        return Err(Error::InvalidDataShape { length, variables });
-    }
-    Ok(length / variables)
-}
-
 impl Pca {
     /// Fits a model to row-major `data` with `variables` values per sample.
     ///
@@ -167,7 +159,7 @@ impl Pca {
     /// Spectra that already exist as separate vectors can be joined with
     /// `concat`, which does not check that they have the same length.
     pub fn fit(data: &[f64], variables: usize, components: usize) -> Result<Self, Error> {
-        let samples = samples_of(data.len(), variables)?;
+        let samples = numeric::samples_of(data.len(), variables)?;
         if samples < 2 {
             return Err(Error::TooFewSpectra {
                 count: samples,

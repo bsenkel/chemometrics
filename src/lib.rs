@@ -6,8 +6,10 @@
 //! Filters preserve signal length and shift complete windows at the edges.
 //! [`normalize::StandardNormalVariate`] removes multiplicative scaling and
 //! constant offsets from each spectrum, and [`baseline::Detrend`] subtracts a
-//! fitted polynomial baseline. With the optional `pca` feature,
-//! [`pca::Pca`] decomposes a set of spectra and reports outlier statistics.
+//! fitted polynomial baseline. [`iot::Iot`] estimates the composition of a
+//! mixture from the spectra of its pure components. With the optional `pca`
+//! feature, [`pca::Pca`] decomposes a set of spectra and reports outlier
+//! statistics.
 //!
 //! The crate is built for measured spectra. Values between about 1e-150 and
 //! 1e150 are processed without overflow or underflow, which covers absorbance,
@@ -20,6 +22,7 @@
 
 pub mod baseline;
 mod error;
+pub mod iot;
 pub mod normalize;
 mod numeric;
 #[cfg(feature = "pca")]
