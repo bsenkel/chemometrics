@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `iot::Iot` for estimating the composition of a mixture from the spectra of
   its pure components by iterative optimization technology. Contributions lie
   between zero and one and sum to one, or to at most one for mixtures with a
-  component that has no spectrum of its own.
+  component that has no spectrum of its own. Validated against analytic
+  results and NumPy/SciPy references.
 - `Error::DependentSpectra` for a pure component spectrum that cannot be told
   apart from a mixture of the others.
 
