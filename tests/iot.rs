@@ -108,20 +108,14 @@ fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
-/// The pure spectra and the contributions, extended by the spectrum of zeros
-/// and the remaining share of the further component of a partial model.
-fn constituents(
-    spectra: &[Vec<f64>],
-    partial: bool,
-    contributions: &[f64],
-) -> (Vec<Vec<f64>>, Vec<f64>) {
+/// The pure spectra, followed by the spectrum of zeros of the further
+/// component of a partial model.
+fn constituents(spectra: &[Vec<f64>], partial: bool) -> Vec<Vec<f64>> {
     let mut spectra = spectra.to_vec();
-    let mut contributions = contributions.to_vec();
     if partial {
         spectra.push(vec![0.0; spectra[0].len()]);
-        contributions.push(1.0 - contributions.iter().sum::<f64>());
     }
-    (spectra, contributions)
+    spectra
 }
 
 fn squared_misfit(spectra: &[Vec<f64>], contributions: &[f64], mixture: &[f64]) -> f64 {
@@ -137,7 +131,11 @@ fn squared_misfit(spectra: &[Vec<f64>], contributions: &[f64], mixture: &[f64]) 
 /// lie in [0, 1] and sum to one, and the gradient of the squared misfit is the
 /// same for every nonzero contribution and not smaller for the others.
 fn assert_optimal(spectra: &[Vec<f64>], partial: bool, mixture: &[f64], contributions: &[f64]) {
-    let (spectra, contributions) = constituents(spectra, partial, contributions);
+    let spectra = constituents(spectra, partial);
+    let mut contributions = contributions.to_vec();
+    if partial {
+        contributions.push(1.0 - contributions.iter().sum::<f64>());
+    }
     assert!(
         contributions.iter().all(|c| (0.0..=1.0).contains(c)),
         "{contributions:?}"
@@ -373,8 +371,7 @@ fn matches_the_best_of_every_set_of_nonzero_contributions() {
                 continue;
             };
             let contributions = model.predict(&mixture).unwrap().contributions;
-            let (oracle, _) = constituents(&rotated, partial, &[]);
-            let expected = brute_force(&oracle, &mixture);
+            let expected = brute_force(&constituents(&rotated, partial), &mixture);
             close(
                 &contributions,
                 &expected[..components],

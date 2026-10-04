@@ -301,7 +301,8 @@ fn solve(r: &[f64], target: &[f64]) -> Result<Vec<f64>, Error> {
     let count = rows + 1;
     let entry = |i: usize, k: usize| if i == 0 { 0.0 } else { r[(i - 1) * rows + k] };
     let norm = |values: &[f64]| numeric::sum(values.iter().map(|x| x * x)).sqrt();
-    let scale = norm(r) * (norm(r) + norm(target));
+    let size = norm(r);
+    let scale = size * (size + norm(target));
     if !scale.is_finite() {
         return Err(Error::NumericalFailure);
     }
