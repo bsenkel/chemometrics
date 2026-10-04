@@ -58,6 +58,18 @@ pub enum Error {
         /// Number of components that stand out from rounding.
         supported: usize,
     },
+    /// A pure component spectrum cannot be told apart from a mixture of the
+    /// preceding ones up to rounding, so its contribution would be arbitrary.
+    ///
+    /// The shares of the mixture sum to one but may be negative; a duplicate
+    /// is the typical case. In a model from
+    /// [`Iot::new_partial`](crate::iot::Iot::new_partial) the further
+    /// component, whose spectrum is zero, takes part as well, so a spectrum of
+    /// zeros or a multiple of a preceding one is also reported.
+    DependentSpectra {
+        /// Index of the first such spectrum.
+        index: usize,
+    },
     /// Signal contains fewer samples than the operation requires, such as
     /// fewer than one filter window.
     TooFewSamples {
@@ -123,6 +135,10 @@ impl fmt::Display for Error {
             } => write!(
                 f,
                 "component count {requested} exceeds the numerical rank {supported} of the data"
+            ),
+            Self::DependentSpectra { index } => write!(
+                f,
+                "pure spectrum {index} cannot be told apart from a mixture of the preceding spectra, which in a partial model include a spectrum of zeros"
             ),
             Self::TooFewSamples { length, minimum } => {
                 write!(f, "at least {minimum} samples are required, got {length}")

@@ -13,7 +13,7 @@ fn check_capacity<T>(length: usize) -> Result<(), Error> {
     Ok(())
 }
 
-fn reserved<T>(length: usize) -> Result<Vec<T>, Error> {
+pub(crate) fn reserved<T>(length: usize) -> Result<Vec<T>, Error> {
     check_capacity::<T>(length)?;
     let mut values = Vec::new();
     values
@@ -62,6 +62,15 @@ pub(crate) fn validate(input: &[f64], output_len: usize, minimum: usize) -> Resu
         return Err(Error::NonFiniteInput { index });
     }
     Ok(())
+}
+
+/// Number of spectra in a row-major slice with `variables` values each, or a
+/// shape error.
+pub(crate) fn samples_of(length: usize, variables: usize) -> Result<usize, Error> {
+    if variables == 0 || length == 0 || length % variables != 0 {
+        return Err(Error::InvalidDataShape { length, variables });
+    }
+    Ok(length / variables)
 }
 
 /// Standard scale-dependent rank threshold: a norm or singular value at or
@@ -155,25 +164,54 @@ pub(crate) fn kernels(
     Ok(result)
 }
 
+/// Why a QR factorization stopped.
+#[derive(Debug, PartialEq)]
+pub(crate) enum QrError {
+    /// The column at this index adds no direction of its own to the preceding
+    /// ones.
+    DependentColumn(usize),
+    /// Arithmetic became non-finite or memory could not be reserved.
+    Other(Error),
+}
+
+impl From<Error> for QrError {
+    fn from(error: Error) -> Self {
+        Self::Other(error)
+    }
+}
+
+impl From<QrError> for Error {
+    fn from(failure: QrError) -> Self {
+        match failure {
+            QrError::DependentColumn(_) => Self::NumericalFailure,
+            QrError::Other(error) => error,
+        }
+    }
+}
+
 /// Factorizes the column-major `rows` × `columns` matrix `a` as `Q R` with
 /// Householder reflections. Afterwards `a` holds `R` in its upper triangle, and
 /// `Q` is the product of the returned reflections, first to last.
 ///
-/// Returns [`Error::NumericalFailure`] if a diagonal entry of `R` is not finite
-/// or falls to `tolerance`, where a column no longer adds a direction of its
-/// own, and [`Error::AllocationFailure`] if the reflections cannot be reserved.
+/// Returns [`QrError::DependentColumn`] if a diagonal entry of `R` falls to
+/// `tolerance`, where a column no longer adds a direction of its own,
+/// [`Error::NumericalFailure`] if one is not finite, and
+/// [`Error::AllocationFailure`] if the reflections cannot be reserved.
 fn householder_qr(
     a: &mut [f64],
     rows: usize,
     columns: usize,
     tolerance: f64,
-) -> Result<Vec<Vec<f64>>, Error> {
+) -> Result<Vec<Vec<f64>>, QrError> {
     let mut reflectors = reserved(columns)?;
     for k in 0..columns {
         let column = &a[k * rows + k..(k + 1) * rows];
         let norm = column.iter().fold(0.0_f64, |norm, x| norm.hypot(*x));
-        if !norm.is_finite() || norm <= tolerance {
-            return Err(Error::NumericalFailure);
+        if !norm.is_finite() {
+            return Err(Error::NumericalFailure.into());
+        }
+        if norm <= tolerance {
+            return Err(QrError::DependentColumn(k));
         }
         // The sign opposite to the diagonal avoids cancellation in `v[0]`.
         let alpha = -norm.copysign(column[0]);
@@ -191,6 +229,71 @@ fn householder_qr(
         reflectors.push(v);
     }
     Ok(reflectors)
+}
+
+/// Thin QR factorization of a matrix with at least as many rows as columns.
+pub(crate) struct ThinQr {
+    /// `Q` transposed, `columns` × `rows`, row-major: row `j` is the `j`-th
+    /// orthonormal column of `Q`.
+    pub(crate) q: Vec<f64>,
+    /// `R`, `columns` × `columns`, column-major, zero below the diagonal.
+    pub(crate) r: Vec<f64>,
+}
+
+/// Factorizes the column-major `rows` × `columns` matrix `a` as `Q R`, with
+/// orthonormal columns in `Q` and an upper triangular `R`.
+///
+/// `columns` must not exceed `rows`. Fails as [`householder_qr`] does.
+pub(crate) fn thin_qr(
+    mut a: Vec<f64>,
+    rows: usize,
+    columns: usize,
+    tolerance: f64,
+) -> Result<ThinQr, QrError> {
+    debug_assert_eq!(a.len(), rows * columns);
+    debug_assert!(columns <= rows);
+    let reflectors = householder_qr(&mut a, rows, columns, tolerance)?;
+    // The product is bounded by `a.len()`, so it cannot overflow.
+    let mut r = zeros(columns * columns)?;
+    for (j, column) in r.chunks_exact_mut(columns).enumerate() {
+        column[..=j].copy_from_slice(&a[j * rows..=j * rows + j]);
+    }
+    // `R` is copied, so the buffer is free for `Q`, whose column `j` is `Q`
+    // applied to the `j`-th unit vector.
+    let mut q = a;
+    q.fill(0.0);
+    for (j, column) in q.chunks_exact_mut(rows).enumerate() {
+        column[j] = 1.0;
+        for (k, v) in reflectors.iter().enumerate().rev() {
+            apply_reflection(v, &mut column[k..]);
+        }
+    }
+    Ok(ThinQr { q, r })
+}
+
+/// Solves `min ‖a x − b‖` for the column-major `rows` × `columns` matrix `a`
+/// with at least as many rows as columns. `a` is overwritten, and the solution
+/// replaces the first `columns` entries of `b`.
+///
+/// Fails as [`householder_qr`] does.
+pub(crate) fn least_squares(
+    a: &mut [f64],
+    rows: usize,
+    columns: usize,
+    tolerance: f64,
+    b: &mut [f64],
+) -> Result<(), QrError> {
+    debug_assert_eq!(a.len(), rows * columns);
+    debug_assert!(columns <= rows && b.len() == rows);
+    let reflectors = householder_qr(a, rows, columns, tolerance)?;
+    for (k, v) in reflectors.iter().enumerate() {
+        apply_reflection(v, &mut b[k..]);
+    }
+    for j in (0..columns).rev() {
+        let known = sum((j + 1..columns).map(|i| a[i * rows + j] * b[i]));
+        b[j] = (b[j] - known) / a[j * rows + j];
+    }
+    Ok(())
 }
 
 /// Applies the reflection `I − 2 v vᵀ`, with `v` of unit length, to `values`.
@@ -344,5 +447,40 @@ mod tests {
     #[test]
     fn rejects_rank_deficient_high_order() {
         assert_eq!(kernels(101, 100, 0, 1.0), Err(Error::NumericalFailure));
+    }
+
+    #[test]
+    fn thin_qr_reproduces_the_matrix_with_orthonormal_columns() {
+        let (rows, columns) = (4, 3);
+        let a = vec![1.0, 2.0, 0.5, -1.0, 0.0, 1.0, 3.0, 2.0, 2.0, -1.0, 1.0, 0.5];
+        let qr = thin_qr(a.clone(), rows, columns, 0.0).unwrap();
+        for i in 0..columns {
+            for j in 0..columns {
+                let dot = sum((0..rows).map(|k| qr.q[i * rows + k] * qr.q[j * rows + k]));
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert!((dot - expected).abs() <= 8.0 * f64::EPSILON, "{i} {j}");
+                if i > j {
+                    assert_eq!(qr.r[j * columns + i], 0.0);
+                }
+            }
+        }
+        for j in 0..columns {
+            for k in 0..rows {
+                let product = sum((0..columns).map(|i| qr.q[i * rows + k] * qr.r[j * columns + i]));
+                let error = (product - a[j * rows + k]).abs();
+                assert!(error <= 16.0 * f64::EPSILON, "{j} {k}");
+            }
+        }
+    }
+
+    #[test]
+    fn thin_qr_reports_the_first_dependent_column() {
+        // The third column is the sum of the first two.
+        let a = vec![1.0, 0.0, 2.0, 0.0, 1.0, 1.0, 1.0, 1.0, 3.0];
+        let tolerance = rank_tolerance(3, 3, 4.0);
+        assert_eq!(
+            thin_qr(a, 3, 3, tolerance).err(),
+            Some(QrError::DependentColumn(2))
+        );
     }
 }

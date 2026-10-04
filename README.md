@@ -11,6 +11,8 @@ in Rust, dependency-free by default:
 - Savitzky–Golay derivatives
 - Standard normal variate (SNV) normalization
 - Polynomial detrending
+- Mixture composition from pure component spectra by iterative optimization
+  technology (IOT), without calibration samples
 - Principal component analysis with Hotelling's T² and the Q residual, behind
   the optional `pca` feature
 
@@ -105,8 +107,9 @@ variation beyond the usual range, and the unexpected band in Q, as variation
 the model does not describe.
 
 `cargo run --example preprocessing` shows which disturbance each preprocessing
-step removes, `cargo run --features pca --example pca` a complete inspection
-with control limits for T² and Q, and the
+step removes, `cargo run --example iot` the composition of powder blends from
+pure component spectra, `cargo run --features pca --example pca` a complete
+inspection with control limits for T² and Q, and the
 [API documentation](https://docs.rs/chemometrics) describes every method.
 
 ## Conventions

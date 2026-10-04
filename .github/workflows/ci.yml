@@ -22,6 +22,7 @@ jobs:
       - run: cargo test --locked --all-features --all-targets
       - run: cargo test --locked --all-features --doc
       - run: cargo run --locked --example preprocessing
+      - run: cargo run --locked --example iot
       - run: cargo run --locked --features pca --example pca
   quality:
     runs-on: ubuntu-latest
