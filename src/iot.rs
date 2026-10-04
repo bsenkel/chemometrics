@@ -119,8 +119,9 @@ impl Iot {
     /// count, then non-finite values, in that order; the index in
     /// [`Error::NonFiniteInput`] refers to `pure`, so the affected spectrum is
     /// `index / variables`. Returns [`Error::DependentSpectra`] for the first
-    /// spectrum that is a mixture of the preceding ones up to rounding, such
-    /// as a duplicate. Returns [`Error::NumericalFailure`] for spectra beyond
+    /// spectrum that is a mixture of the preceding ones up to rounding, with
+    /// shares that sum to one but may be negative, such as a duplicate.
+    /// Returns [`Error::NumericalFailure`] for spectra beyond
     /// about 1e±150, and [`Error::AllocationFailure`] if memory cannot be
     /// reserved.
     pub fn new(pure: &[f64], variables: usize) -> Result<Self, Error> {
@@ -134,9 +135,17 @@ impl Iot {
     /// remainder belongs to the further component, whose spectrum counts as
     /// zero. Between one and `variables` components are supported.
     ///
+    /// The further component's spectrum must be zero after preprocessing,
+    /// too: an offset or baseline shared by all measured spectra is part of
+    /// it and has to be removed first, for example with a
+    /// [`SavitzkyGolay`](crate::smooth::SavitzkyGolay) derivative.
+    /// [`Self::new`] is not affected by a shared offset.
+    ///
     /// # Errors
     /// As [`Self::new`], except that a single spectrum suffices and that
-    /// [`Error::DependentSpectra`] also reports a spectrum of zeros.
+    /// [`Error::DependentSpectra`] also reports a spectrum of zeros or a
+    /// multiple of a preceding spectrum, which cannot be told apart from a
+    /// mixture with the further component.
     pub fn new_partial(pure: &[f64], variables: usize) -> Result<Self, Error> {
         Self::build(pure, variables, true)
     }
