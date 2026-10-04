@@ -338,7 +338,9 @@ fn solve(r: &[f64], target: &[f64]) -> Result<Vec<f64>, Error> {
             &mut right_side,
         )?;
         for (i, value) in rest().zip(&right_side) {
-            fit[i] = *value;
+            // Adding zero turns a negative zero from the back substitution
+            // into a positive one, so an absent component reports 0.0.
+            fit[i] = value + 0.0;
         }
         fit[pivot] = 1.0 - numeric::sum(right_side[..columns].iter().copied());
         if fit.iter().any(|x| !x.is_finite()) {

@@ -260,6 +260,39 @@ fn exact_mixtures_are_recovered() {
 }
 
 #[test]
+fn absent_components_report_positive_zero() {
+    // A zero from the back substitution can carry a negative sign, which
+    // would print as -0.0.
+    let pure = [
+        vec![0.05, 0.60, 0.10, 0.05, 0.40, 0.05, 0.10, 0.70],
+        vec![0.30, 0.10, 0.50, 0.70, 0.10, 0.60, 0.20, 0.10],
+        vec![0.05, 0.05, 0.10, 0.05, 0.80, 0.05, 0.60, 0.10],
+    ];
+    let mut negative = 0;
+    for partial in [false, true] {
+        for weights in [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.5, 0.5, 0.0],
+            [0.5, 0.0, 0.5],
+            [0.0, 0.5, 0.5],
+        ] {
+            let contributions = predict(&pure, partial, &blend(&pure, &weights)).contributions;
+            negative += contributions
+                .iter()
+                .filter(|c| c.is_sign_negative())
+                .count();
+            assert_eq!(
+                format!("{:.1}", contributions[2]),
+                format!("{:.1}", weights[2])
+            );
+        }
+    }
+    assert_eq!(negative, 0);
+}
+
+#[test]
 fn two_components_are_clamped_to_the_segment() {
     let a = [0.2, 0.9, 0.4, 0.1];
     let b = [0.7, 0.1, 0.3, 0.6];
