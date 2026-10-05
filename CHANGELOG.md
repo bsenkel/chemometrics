@@ -7,13 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-05
+
 ### Added
 
 - `iot::Iot` for estimating the composition of a mixture from the spectra of
   its pure components by iterative optimization technology. Contributions lie
-  between zero and one and sum to one, or to at most one for mixtures with a
-  component that has no spectrum of its own. Validated against analytic
-  results and NumPy/SciPy references.
+  between zero and one and sum to one; `Iot::new_partial` leaves a remainder
+  for a component without a spectrum.
 - `Error::DependentSpectra` for a pure component spectrum that cannot be told
   apart from a mixture of the others.
 
@@ -87,7 +88,8 @@ Initial release.
 - Documentation, an executable example, MIT license and CI for Linux, macOS,
   Windows and the minimum supported Rust version.
 
-[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/bsenkel/chemometrics/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/bsenkel/chemometrics/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bsenkel/chemometrics/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/bsenkel/chemometrics/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/bsenkel/chemometrics/compare/v0.1.2...v0.1.3
