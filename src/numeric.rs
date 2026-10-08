@@ -420,8 +420,8 @@ mod tests {
 
     #[test]
     fn known_kernels_are_exact_to_rounding() {
-        // Classic quadratic coefficients for window 5: the centre and the left
-        // edge of the smoother, and the centre of the first derivative.
+        // Classic quadratic coefficients for window 5: the center and the left
+        // edge of the smoother, and the center of the first derivative.
         let smooth = kernels(5, 2, 0, 1.0).unwrap();
         let derivative = kernels(5, 2, 1, 1.0).unwrap();
         for (row, expected) in [

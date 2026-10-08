@@ -179,7 +179,7 @@ impl Pca {
         // Centering leaves rounding of the order of EPSILON times the
         // uncentered values, which a tolerance relative to the centered data
         // cannot see.
-        let uncentred_norm = numeric::sum(data.iter().map(|x| x * x)).sqrt();
+        let uncentered_norm = numeric::sum(data.iter().map(|x| x * x)).sqrt();
         let mut centered = numeric::zeros(data.len())?;
         centered.copy_from_slice(data);
         let mut mean = numeric::zeros(variables)?;
@@ -196,11 +196,11 @@ impl Pca {
         let variance = numeric::sum(centered.iter().map(|x| x * x)) / degrees;
         // Squares beyond the representable range would make the rank test below
         // meaningless.
-        if !uncentred_norm.is_finite() || !variance.is_finite() {
+        if !uncentered_norm.is_finite() || !variance.is_finite() {
             return Err(Error::NumericalFailure);
         }
         let svd = numeric::thin_svd(&centered, samples, variables, components)?;
-        let threshold = numeric::rank_tolerance(samples, variables, uncentred_norm);
+        let threshold = numeric::rank_tolerance(samples, variables, uncentered_norm);
         let supported = svd.values[..maximum]
             .iter()
             .filter(|s| **s > threshold)
@@ -212,7 +212,7 @@ impl Pca {
             });
         }
         let kept = &svd.values[..components];
-        // Centring removes one direction, so with no more samples than
+        // Centering removes one direction, so with no more samples than
         // variables the last singular value is rounding, not variation.
         let mut eigenvalues = numeric::zeros(maximum)?;
         for (eigenvalue, value) in eigenvalues.iter_mut().zip(&svd.values) {
