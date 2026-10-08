@@ -1,6 +1,3 @@
-// Private numerical helpers shared by the public modules: least squares,
-// validation, buffers and the thin SVD adapter; intentionally not a general
-// matrix API.
 use crate::Error;
 
 fn check_capacity<T>(length: usize) -> Result<(), Error> {
