@@ -4,8 +4,8 @@
 [![Crates.io](https://img.shields.io/crates/v/chemometrics.svg)](https://crates.io/crates/chemometrics)
 [![docs.rs](https://img.shields.io/docsrs/chemometrics)](https://docs.rs/chemometrics)
 
-Spectral preprocessing and chemometric analysis for uniformly sampled spectra
-in Rust, dependency-free by default:
+Spectral preprocessing and chemometric analysis in Rust, dependency-free by
+default:
 
 - Moving average and Savitzky–Golay smoothing
 - Savitzky–Golay derivatives
@@ -114,13 +114,14 @@ inspection with control limits for T² and Q, and the
 
 ## Conventions
 
-- Spectra are `f64` slices on a uniform axis, ascending or descending; results
-  have the same length.
+- Spectra are `f64` slices, and preprocessing keeps their length. Filters,
+  derivatives and detrending need a uniform axis, ascending or descending; SNV,
+  IOT and PCA need none.
 - Invalid input and numerical failures return a `chemometrics::Error`; NaN and
   infinity are rejected.
 - Values between about 1e-150 and 1e150 are supported; beyond that range,
   methods return `NumericalFailure` rather than a wrong value.
-- Not supported: uneven sampling, `f32`, `no_std`.
+- Not supported: `f32`, `no_std`.
 
 ## Validation
 

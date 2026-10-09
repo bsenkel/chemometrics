@@ -1,5 +1,5 @@
-//! Spectral preprocessing and chemometric analysis of uniformly sampled
-//! spectra, dependency-free by default.
+//! Spectral preprocessing and chemometric analysis, dependency-free by
+//! default.
 //!
 //! Start with [`smooth::MovingAverage`] or [`smooth::SavitzkyGolay`].
 //! [`smooth::SavitzkyGolay::new_derivative`] also computes local derivatives.
