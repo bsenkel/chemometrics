@@ -3,7 +3,8 @@
 //! [`Iot`] implements iterative optimization technology (IOT) after Muteki et
 //! al. (Ind. Eng. Chem. Res., 2013): a mixture spectrum is described as a sum
 //! of the pure component spectra, each weighted by its contribution. The
-//! contributions are not negative and sum to one. No calibration samples are
+//! contributions are not negative and sum to one; [`Iot::new_partial`] leaves
+//! a remainder for a component without a spectrum. No calibration samples are
 //! needed, only one spectrum of every pure component.
 //!
 //! # Examples
