@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `SavitzkyGolay`'s `Debug` output shows its parameters instead of all
+  coefficients.
+
 ## [0.2.1] - 2026-10-05
 
 ### Added

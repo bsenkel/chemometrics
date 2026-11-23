@@ -214,3 +214,17 @@ fn impossible_sg_window_returns_allocation_error() {
         ));
     }
 }
+
+#[test]
+fn debug_shows_the_parameters_not_the_kernels() {
+    let filter = SavitzkyGolay::new(31, 3).unwrap();
+    let text = format!("{filter:?}");
+    assert!(
+        text.contains("window_length: 31")
+            && text.contains("polynomial_order: 3")
+            && text.contains("derivative_order: 0"),
+        "{text}"
+    );
+    assert!(!text.contains("sample_spacing"), "{text}");
+    assert!(text.len() < 120, "{} characters", text.len());
+}

@@ -251,3 +251,20 @@ fn scipy_derivative_reference() {
     }
     assert_eq!(cases, 103, "missing derivative reference cases");
 }
+
+#[test]
+fn derivative_debug_shows_the_parameters_not_the_kernels() {
+    let derivative = SavitzkyGolay::new_derivative(31, 3, 2, 0.5).unwrap();
+    let text = format!("{derivative:?}");
+    assert!(
+        text.contains("window_length: 31")
+            && text.contains("polynomial_order: 3")
+            && text.contains("derivative_order: 2")
+            && text.contains("sample_spacing: 0.5"),
+        "{text}"
+    );
+    assert!(text.len() < 120, "{} characters", text.len());
+    let smoother = SavitzkyGolay::new(31, 3).unwrap();
+    let order_zero = SavitzkyGolay::new_derivative(31, 3, 0, 0.5).unwrap();
+    assert_eq!(format!("{order_zero:?}"), format!("{smoother:?}"));
+}

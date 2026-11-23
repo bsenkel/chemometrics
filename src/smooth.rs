@@ -4,6 +4,7 @@
 //! the nearest complete window is used without padding or invented samples.
 //! An ascending or descending uniform x-axis is equally valid.
 use crate::{Error, numeric};
+use std::fmt;
 
 fn window_valid(window: usize) -> Result<(), Error> {
     if window == 0 || window % 2 == 0 {
@@ -106,8 +107,8 @@ impl MovingAverage {
 /// window and evaluated at the sample's position, also at the edges. Orders 2
 /// or 3 are typical; very high orders fail with [`Error::NumericalFailure`].
 ///
-/// Construction stores window length² coefficients. Application takes
-/// O(signal length × window length) time.
+/// Construction stores window length² coefficients; `Debug` prints only its
+/// parameters. Application takes O(signal length × window length) time.
 ///
 /// # Examples
 /// ```
@@ -122,10 +123,27 @@ impl MovingAverage {
 /// }
 /// # Ok::<(), chemometrics::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SavitzkyGolay {
     window_length: usize,
+    polynomial_order: usize,
+    derivative_order: usize,
+    sample_spacing: f64,
     kernels: Vec<f64>,
+}
+
+impl fmt::Debug for SavitzkyGolay {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("SavitzkyGolay");
+        debug
+            .field("window_length", &self.window_length)
+            .field("polynomial_order", &self.polynomial_order)
+            .field("derivative_order", &self.derivative_order);
+        if self.derivative_order > 0 {
+            debug.field("sample_spacing", &self.sample_spacing);
+        }
+        debug.finish_non_exhaustive()
+    }
 }
 
 impl SavitzkyGolay {
@@ -195,6 +213,9 @@ impl SavitzkyGolay {
         }
         Ok(Self {
             window_length,
+            polynomial_order,
+            derivative_order,
+            sample_spacing,
             kernels: numeric::kernels(
                 window_length,
                 polynomial_order,
