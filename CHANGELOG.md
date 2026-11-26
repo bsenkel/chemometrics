@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Pca::from_parts` to reconstruct a validated PCA model from its mean,
+  loadings, all eigenvalues and training sample count without refitting. The
+  reconstructed model has no training scores.
+- `Error::InvalidEigenvalueCount`, `Error::InvalidEigenvalues` and
+  `Error::NonOrthonormalLoadings` for invalid parts passed to
+  `Pca::from_parts`.
+
 ### Changed
 
 - `SavitzkyGolay`'s `Debug` output shows its parameters instead of all

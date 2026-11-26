@@ -58,6 +58,18 @@ pub enum Error {
         /// Number of components that stand out from rounding.
         supported: usize,
     },
+    /// Number of eigenvalues differs from `min(samples − 1, variables)`.
+    InvalidEigenvalueCount {
+        /// Required number of eigenvalues.
+        expected: usize,
+        /// Actual number of eigenvalues.
+        actual: usize,
+    },
+    /// Eigenvalues are negative, not in nonincreasing order, or zero for a
+    /// retained component.
+    InvalidEigenvalues,
+    /// Loading vectors are not unit length or not mutually orthogonal.
+    NonOrthonormalLoadings,
     /// A pure component spectrum cannot be told apart from a mixture of the
     /// preceding ones up to rounding, so its contribution would be arbitrary.
     ///
@@ -136,6 +148,13 @@ impl fmt::Display for Error {
                 f,
                 "component count {requested} exceeds the numerical rank {supported} of the data"
             ),
+            Self::InvalidEigenvalueCount { expected, actual } => {
+                write!(f, "eigenvalue count must be {expected}, got {actual}")
+            }
+            Self::InvalidEigenvalues => f.write_str(
+                "eigenvalues must be nonnegative, nonincreasing, and positive for retained components",
+            ),
+            Self::NonOrthonormalLoadings => f.write_str("loading vectors must be orthonormal"),
             Self::DependentSpectra { index } => write!(
                 f,
                 "pure spectrum {index} cannot be told apart from a mixture of the preceding spectra, which in a partial model include a spectrum of zeros"

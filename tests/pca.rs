@@ -917,3 +917,306 @@ fn numpy_reference() {
         "{case} cases, {projections} projections"
     );
 }
+
+#[test]
+fn from_parts_roundtrip_matches_fitted_model() {
+    let tall = pseudo_random(20 * 5, 17);
+    let wide = mixtures(12);
+    // Four variables with variation in only two directions, leaving trailing
+    // zero eigenvalues in `all_eigenvalues`.
+    let rank_deficient: Vec<f64> = (0..8)
+        .flat_map(|i| {
+            let a = (i as f64 * 0.6).sin();
+            let b = (i as f64 * 1.1).cos();
+            [a + b, a - b, 2.0 * a, 0.0]
+        })
+        .collect();
+    for (data, variables, components) in [(&tall, 5, 2), (&wide, 101, 3), (&rank_deficient, 4, 2)] {
+        let fitted = Pca::fit(data, variables, components).unwrap();
+        let loaded = Pca::from_parts(
+            fitted.mean(),
+            fitted.loadings(),
+            fitted.all_eigenvalues(),
+            fitted.samples(),
+        )
+        .unwrap();
+        assert_eq!(loaded.samples(), fitted.samples());
+        assert_eq!(loaded.variables(), fitted.variables());
+        assert_eq!(loaded.components(), fitted.components());
+        assert_eq!(loaded.mean(), fitted.mean());
+        assert_eq!(loaded.loadings(), fitted.loadings());
+        for a in 0..components {
+            assert_eq!(loaded.loading(a), fitted.loading(a));
+        }
+        assert_eq!(loaded.loading(components), None);
+        assert_eq!(loaded.eigenvalues(), fitted.eigenvalues());
+        assert_eq!(loaded.all_eigenvalues(), fitted.all_eigenvalues());
+        assert!(loaded.scores().is_empty());
+        assert_eq!(loaded.score(0), None);
+        close(&[loaded.total_variance()], &[fitted.total_variance()]);
+        close(
+            loaded.explained_variance_ratio(),
+            fitted.explained_variance_ratio(),
+        );
+        let probe: Vec<f64> = data[..variables]
+            .iter()
+            .enumerate()
+            .map(|(j, x)| x + 0.05 * (j as f64).cos())
+            .collect();
+        for spectrum in [&data[..variables], probe.as_slice()] {
+            let expected = fitted.project(spectrum).unwrap();
+            assert_eq!(loaded.project(spectrum).unwrap(), expected);
+            let mut buf = vec![0.0; components];
+            let diagnostics = loaded.project_into(spectrum, &mut buf).unwrap();
+            assert_eq!(buf, expected.scores);
+            assert_eq!(diagnostics, expected.diagnostics);
+        }
+        assert_eq!(format!("{loaded:?}"), format!("{fitted:?}"));
+    }
+}
+
+#[test]
+fn from_parts_preserves_loading_signs_and_normalizes_zero_eigenvalues() {
+    let data = mixtures(10);
+    let fitted = Pca::fit(&data, 101, 2).unwrap();
+    let mut flipped = fitted.loadings().to_vec();
+    for value in &mut flipped[..101] {
+        *value = -*value;
+    }
+    let mut eigenvalues = fitted.all_eigenvalues().to_vec();
+    *eigenvalues.last_mut().unwrap() = -0.0;
+    let loaded = Pca::from_parts(fitted.mean(), &flipped, &eigenvalues, fitted.samples()).unwrap();
+    assert_eq!(loaded.loadings(), flipped.as_slice());
+    assert!(loaded.all_eigenvalues().last().unwrap().is_sign_positive());
+    let expected = fitted.project(&data[..101]).unwrap();
+    let actual = loaded.project(&data[..101]).unwrap();
+    assert_eq!(actual.scores[0], -expected.scores[0]);
+    assert_eq!(actual.scores[1], expected.scores[1]);
+    assert_eq!(actual.diagnostics, expected.diagnostics);
+}
+
+#[test]
+fn from_parts_accepts_decimal_roundtrip_and_rejects_non_orthonormal_loadings() {
+    let data = mixtures(12);
+    let fitted = Pca::fit(&data, 101, 3).unwrap();
+    let roundtrip = |values: &[f64]| -> Vec<f64> {
+        values
+            .iter()
+            .map(|x| format!("{x:.14e}").parse::<f64>().unwrap())
+            .collect()
+    };
+    let loaded = Pca::from_parts(
+        &roundtrip(fitted.mean()),
+        &roundtrip(fitted.loadings()),
+        &roundtrip(fitted.all_eigenvalues()),
+        fitted.samples(),
+    )
+    .unwrap();
+    let expected = fitted.project(&data[..101]).unwrap();
+    let actual = loaded.project(&data[..101]).unwrap();
+    close(&actual.scores, &expected.scores);
+    close(
+        &[
+            actual.diagnostics.hotelling_t2,
+            actual.diagnostics.q_residual,
+        ],
+        &[
+            expected.diagnostics.hotelling_t2,
+            expected.diagnostics.q_residual,
+        ],
+    );
+
+    let twelve_digits: Vec<f64> = fitted
+        .loadings()
+        .iter()
+        .map(|x| format!("{x:.11e}").parse::<f64>().unwrap())
+        .collect();
+    assert!(
+        Pca::from_parts(
+            fitted.mean(),
+            &twelve_digits,
+            fitted.all_eigenvalues(),
+            fitted.samples()
+        )
+        .is_ok()
+    );
+
+    // Unnormalized, non-orthogonal, column-major transposed and overflowing loadings.
+    let mean = [0.0; 4];
+    let eigenvalues = [4.0, 2.0, 1.0, 0.5];
+    assert_eq!(
+        Pca::from_parts(&mean, &[1.0 + 1e-8, 0.0, 0.0, 0.0], &eigenvalues, 6).unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+    let angle = 1e-4_f64;
+    assert_eq!(
+        Pca::from_parts(
+            &mean,
+            &[1.0, 0.0, 0.0, 0.0, angle.sin(), angle.cos(), 0.0, 0.0],
+            &eigenvalues,
+            6
+        )
+        .unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+    // Two orthonormal rows, accepted row-major and rejected column-major.
+    let rows = [0.6, 0.8, 0.0, 0.0, -0.8, 0.6, 0.0, 0.0];
+    let columns = [0.6, -0.8, 0.8, 0.6, 0.0, 0.0, 0.0, 0.0];
+    assert!(Pca::from_parts(&mean, &rows, &eigenvalues, 6).is_ok());
+    assert_eq!(
+        Pca::from_parts(&mean, &columns, &eigenvalues, 6).unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+    assert_eq!(
+        Pca::from_parts(&mean, &[f64::MAX, 0.0, 0.0, 0.0], &eigenvalues, 6).unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+    assert_eq!(
+        Pca::from_parts(
+            &mean,
+            &[f64::MAX, f64::MAX, 0.0, 0.0, -f64::MAX, f64::MAX, 0.0, 0.0],
+            &eigenvalues,
+            6
+        )
+        .unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+}
+
+#[test]
+fn from_parts_rejects_invalid_inputs_in_order() {
+    // Shape comes before sample count, component count, eigenvalue count and NaN.
+    assert_eq!(
+        Pca::from_parts(&[], &[f64::NAN], &[], 0).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 1,
+            variables: 0
+        }
+    );
+    assert_eq!(
+        Pca::from_parts(&[f64::NAN; 3], &[], &[], 0).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 0,
+            variables: 3
+        }
+    );
+    assert_eq!(
+        Pca::from_parts(&[f64::NAN; 3], &[1.0, 0.0], &[], 0).unwrap_err(),
+        Error::InvalidDataShape {
+            length: 2,
+            variables: 3
+        }
+    );
+    // Sample count comes before component count, eigenvalue count and NaN.
+    for samples in [0, 1] {
+        assert_eq!(
+            Pca::from_parts(&[f64::NAN; 2], &[1.0, 0.0], &[], samples).unwrap_err(),
+            Error::TooFewSpectra {
+                count: samples,
+                minimum: 2
+            }
+        );
+    }
+    // Component count comes before eigenvalue count and NaN.
+    assert_eq!(
+        Pca::from_parts(&[f64::NAN; 3], &[0.0; 6], &[], 2).unwrap_err(),
+        Error::InvalidComponentCount {
+            requested: 2,
+            maximum: 1
+        }
+    );
+    // Eigenvalue count comes before NaN (such as passing only retained eigenvalues).
+    assert_eq!(
+        Pca::from_parts(&[f64::NAN; 3], &[1.0, 0.0, 0.0], &[1.0], 5).unwrap_err(),
+        Error::InvalidEigenvalueCount {
+            expected: 3,
+            actual: 1
+        }
+    );
+    // Non-finite checks run on mean, then loadings, then all_eigenvalues.
+    assert_eq!(
+        Pca::from_parts(
+            &[0.0, f64::NAN, 0.0],
+            &[f64::INFINITY, 0.0, 0.0],
+            &[f64::NAN, 0.0, 0.0],
+            5
+        )
+        .unwrap_err(),
+        Error::NonFiniteInput { index: 1 }
+    );
+    assert_eq!(
+        Pca::from_parts(
+            &[0.0; 3],
+            &[1.0, 0.0, f64::INFINITY],
+            &[f64::NAN, 0.0, 0.0],
+            5
+        )
+        .unwrap_err(),
+        Error::NonFiniteInput { index: 2 }
+    );
+    assert_eq!(
+        Pca::from_parts(
+            &[0.0; 3],
+            &[1.0, 0.0, 0.0],
+            &[2.0, f64::NEG_INFINITY, 0.0],
+            5
+        )
+        .unwrap_err(),
+        Error::NonFiniteInput { index: 1 }
+    );
+    // Invalid eigenvalues come before loading orthonormality.
+    let bad_loadings = [2.0, 0.0, 0.0];
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &bad_loadings, &[1.0, 0.5, -0.1], 5).unwrap_err(),
+        Error::InvalidEigenvalues
+    );
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &bad_loadings, &[1.0, 2.0, 0.5], 5).unwrap_err(),
+        Error::InvalidEigenvalues
+    );
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &bad_loadings, &[0.0, 0.0, 0.0], 5).unwrap_err(),
+        Error::InvalidEigenvalues
+    );
+    // Non-orthonormal loadings come before numerical failures in eigenvalues.
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &bad_loadings, &[1e-320, 0.0, 0.0], 5).unwrap_err(),
+        Error::NonOrthonormalLoadings
+    );
+    // Subnormal retained eigenvalues or overflowing total variance fail numerically.
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &[1.0, 0.0, 0.0], &[1e-320, 0.0, 0.0], 5).unwrap_err(),
+        Error::NumericalFailure
+    );
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &[1.0, 0.0, 0.0], &[f64::MAX, f64::MAX, 0.0], 5).unwrap_err(),
+        Error::NumericalFailure
+    );
+    // A subnormal discarded eigenvalue is allowed, matching Pca::fit.
+    assert!(Pca::from_parts(&[0.0; 3], &[1.0, 0.0, 0.0], &[1.0, 1e-320, 0.0], 5).is_ok());
+}
+
+#[test]
+fn from_parts_rejects_components_that_fit_would_reject() {
+    let loadings = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+    let eigenvalues = [1.0, 1e-20, 0.0];
+    assert!(Pca::from_parts(&[0.0; 3], &loadings, &eigenvalues, 5).is_ok());
+    let rounding = Error::InsufficientRank {
+        requested: 2,
+        supported: 1,
+    };
+    assert_eq!(
+        Pca::from_parts(&[0.0; 3], &loadings, &[1.0, 1e-200, 0.0], 5).unwrap_err(),
+        rounding
+    );
+    // Centering data with a large mean leaves rounding that hides the second
+    // component.
+    assert_eq!(
+        Pca::from_parts(&[1e8; 3], &loadings, &eigenvalues, 5).unwrap_err(),
+        rounding
+    );
+    assert_eq!(
+        Pca::from_parts(&[1e200; 3], &loadings, &eigenvalues, 5).unwrap_err(),
+        Error::NumericalFailure
+    );
+}

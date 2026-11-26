@@ -53,6 +53,15 @@
 use crate::{Error, numeric};
 use std::fmt;
 
+/// Maximum allowed entrywise deviation of `P Pᵀ` from the identity when
+/// loading a model with [`Pca::from_parts`].
+///
+/// Rounding to twelve significant digits stays far below it, while
+/// unnormalized or non-orthogonal rows exceed it. Precision lost to `f32`
+/// storage averages out over many variables, so it cannot be detected
+/// reliably; it changes T² and Q only in about the seventh digit.
+const ORTHONORMAL_TOLERANCE: f64 = 1e-9;
+
 /// Distance of one spectrum from the center of the model and from its plane.
 ///
 /// Both statistics are needed: T² finds a spectrum that is extreme in known
@@ -92,8 +101,9 @@ pub struct Projection {
 ///
 /// Fitting takes O(samples × variables × min(samples, variables)) time on a
 /// single thread and temporarily needs a few times the memory of the data. The
-/// model keeps the mean, loadings, training scores and variances, but not the
-/// data; `Debug` prints only its shape and eigenvalues.
+/// model keeps the mean, loadings, variances and, when fitted with
+/// [`Pca::fit`], the training scores, but not the data; `Debug` prints only
+/// its shape and eigenvalues.
 #[derive(Clone)]
 pub struct Pca {
     samples: usize,
@@ -248,6 +258,160 @@ impl Pca {
         Ok(model)
     }
 
+    /// Reconstructs a fitted model from its mean, loadings, full eigenvalue
+    /// spectrum and training sample count, without refitting.
+    ///
+    /// Use this to load a validated model across platforms or library versions
+    /// without depending on a file format. The loaded model carries no
+    /// training scores, so [`Self::scores`] is empty and [`Self::score`]
+    /// returns `None`, while [`Self::project`], [`Self::project_into`] and all
+    /// variance accessors match a model from [`Self::fit`]. Loading signs are
+    /// kept as given.
+    ///
+    /// `loadings` is `components` × `variables` row-major, where `variables`
+    /// is `mean.len()`. `all_eigenvalues` must contain all
+    /// `min(samples − 1, variables)` eigenvalues in nonincreasing order, as
+    /// returned by [`Self::all_eigenvalues`], so total variance, explained
+    /// variance ratios and Q control limits stay consistent. Loading rows must
+    /// be orthonormal (`|P Pᵀ − I| ≤ 1e-9` entrywise). Values written with at
+    /// least twelve significant digits pass; the check catches unnormalized or
+    /// non-orthogonal rows, but not precision lost to `f32` storage.
+    ///
+    /// # Errors
+    /// Checks `loadings` shape against `mean.len()`, then `samples`, then the
+    /// component count, then `all_eigenvalues.len()`, then non-finite values,
+    /// then eigenvalue values, then loading orthonormality, then the rank, in
+    /// that order. Non-finite values are sought in `mean`, then `loadings`,
+    /// then `all_eigenvalues`, and the index in [`Error::NonFiniteInput`]
+    /// refers to the first of these slices that contains one. Returns
+    /// [`Error::InvalidDataShape`], [`Error::TooFewSpectra`],
+    /// [`Error::InvalidComponentCount`], [`Error::InvalidEigenvalueCount`],
+    /// [`Error::NonFiniteInput`], [`Error::InvalidEigenvalues`],
+    /// [`Error::NonOrthonormalLoadings`], [`Error::InsufficientRank`] if
+    /// [`Self::fit`] would reject a retained component as rounding,
+    /// [`Error::NumericalFailure`] if the model describes data beyond the
+    /// `f64` range or retained eigenvalues are not normal numbers, and
+    /// [`Error::AllocationFailure`] if memory cannot be reserved.
+    ///
+    /// # Examples
+    /// ```
+    /// use chemometrics::pca::Pca;
+    /// let references = [
+    ///     0.10, 0.31, 0.50, 0.29, 0.10,
+    ///     0.12, 0.36, 0.61, 0.36, 0.11,
+    ///     0.16, 0.45, 0.75, 0.44, 0.15,
+    ///     0.17, 0.52, 0.85, 0.51, 0.17,
+    ///     0.20, 0.60, 0.99, 0.61, 0.20,
+    /// ];
+    /// let fitted = Pca::fit(&references, 5, 1)?;
+    /// let loaded = Pca::from_parts(
+    ///     fitted.mean(),
+    ///     fitted.loadings(),
+    ///     fitted.all_eigenvalues(),
+    ///     fitted.samples(),
+    /// )?;
+    /// assert!(loaded.scores().is_empty());
+    /// let spectrum = [0.14, 0.42, 0.70, 0.52, 0.34];
+    /// assert_eq!(loaded.project(&spectrum)?, fitted.project(&spectrum)?);
+    /// # Ok::<(), chemometrics::Error>(())
+    /// ```
+    pub fn from_parts(
+        mean: &[f64],
+        loadings: &[f64],
+        all_eigenvalues: &[f64],
+        samples: usize,
+    ) -> Result<Self, Error> {
+        let variables = mean.len();
+        let components = numeric::samples_of(loadings.len(), variables)?;
+        if samples < 2 {
+            return Err(Error::TooFewSpectra {
+                count: samples,
+                minimum: 2,
+            });
+        }
+        let maximum = (samples - 1).min(variables);
+        if components > maximum {
+            return Err(Error::InvalidComponentCount {
+                requested: components,
+                maximum,
+            });
+        }
+        if all_eigenvalues.len() != maximum {
+            return Err(Error::InvalidEigenvalueCount {
+                expected: maximum,
+                actual: all_eigenvalues.len(),
+            });
+        }
+        for slice in [mean, loadings, all_eigenvalues] {
+            if let Some(index) = slice.iter().position(|x| !x.is_finite()) {
+                return Err(Error::NonFiniteInput { index });
+            }
+        }
+        if all_eigenvalues.iter().any(|v| *v < 0.0)
+            || all_eigenvalues[..components].contains(&0.0)
+            || all_eigenvalues.windows(2).any(|w| w[0] < w[1])
+        {
+            return Err(Error::InvalidEigenvalues);
+        }
+        for (a, row_a) in loadings.chunks_exact(variables).enumerate() {
+            for (b, row_b) in loadings.chunks_exact(variables).enumerate().skip(a) {
+                let dot = numeric::sum(row_a.iter().zip(row_b).map(|(x, y)| x * y));
+                let expected = if a == b { 1.0 } else { 0.0 };
+                if !dot.is_finite() || (dot - expected).abs() > ORTHONORMAL_TOLERANCE {
+                    return Err(Error::NonOrthonormalLoadings);
+                }
+            }
+        }
+        // The rank test of `fit` needs the norm of the uncentered data, which
+        // the mean and the eigenvalues determine.
+        let degrees = (samples - 1) as f64;
+        let uncentered_norm = (samples as f64 * numeric::sum(mean.iter().map(|m| m * m))
+            + degrees * numeric::sum(all_eigenvalues.iter().copied()))
+        .sqrt();
+        if !uncentered_norm.is_finite() {
+            return Err(Error::NumericalFailure);
+        }
+        let threshold = numeric::rank_tolerance(samples, variables, uncentered_norm);
+        let supported = all_eigenvalues
+            .iter()
+            .filter(|v| (*v * degrees).sqrt() > threshold)
+            .count();
+        if supported < components {
+            return Err(Error::InsufficientRank {
+                requested: components,
+                supported,
+            });
+        }
+        let mut owned_mean = numeric::zeros(variables)?;
+        owned_mean.copy_from_slice(mean);
+        let mut owned_loadings = numeric::zeros(loadings.len())?;
+        owned_loadings.copy_from_slice(loadings);
+        let mut eigenvalues = numeric::zeros(maximum)?;
+        for (slot, value) in eigenvalues.iter_mut().zip(all_eigenvalues) {
+            // `fit` never reports negative zero, so a stored one is turned
+            // into positive zero to match.
+            *slot = value + 0.0;
+        }
+        let total_variance = numeric::sum(eigenvalues.iter().copied());
+        let mut ratios = numeric::zeros(components)?;
+        for (ratio, eigenvalue) in ratios.iter_mut().zip(&eigenvalues) {
+            *ratio = eigenvalue / total_variance;
+        }
+        let model = Self {
+            samples,
+            variables,
+            components,
+            mean: owned_mean,
+            loadings: owned_loadings,
+            scores: Vec::new(),
+            eigenvalues,
+            ratios,
+            total_variance,
+        };
+        model.usable()?;
+        Ok(model)
+    }
+
     /// Number of samples the model was fitted to.
     pub fn samples(&self) -> usize {
         self.samples
@@ -270,9 +434,10 @@ impl Pca {
 
     /// All loading vectors, `components` × `variables` row-major.
     ///
-    /// The loadings are orthonormal. Each component's sign is fixed so that its
-    /// largest loading is positive; among loadings equal up to rounding, the
-    /// first decides. Components with nearly equal eigenvalues are not
+    /// The loadings are orthonormal. [`Self::fit`] fixes each component's sign
+    /// so that its largest loading is positive; among loadings equal up to
+    /// rounding, the first decides. [`Self::from_parts`] keeps the signs it is
+    /// given. Components with nearly equal eigenvalues are not
     /// determined by the data and may differ between platforms or library
     /// versions.
     pub fn loadings(&self) -> &[f64] {
@@ -284,12 +449,14 @@ impl Pca {
         self.loadings.chunks_exact(self.variables).nth(component)
     }
 
-    /// Training scores, `samples` × `components` row-major.
+    /// Training scores, `samples` × `components` row-major, or empty for a
+    /// model loaded with [`Self::from_parts`].
     pub fn scores(&self) -> &[f64] {
         &self.scores
     }
 
-    /// Scores of one training sample, or `None` if it does not exist.
+    /// Scores of one training sample, or `None` if it does not exist or the
+    /// model was loaded with [`Self::from_parts`].
     pub fn score(&self, sample: usize) -> Option<&[f64]> {
         self.scores.chunks_exact(self.components).nth(sample)
     }
