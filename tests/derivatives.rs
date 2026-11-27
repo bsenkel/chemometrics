@@ -184,7 +184,7 @@ fn derivatives_reuse_and_preserve_buffer_on_invalid_input() {
 
 #[test]
 fn extreme_spacing_reports_unrepresentable_scaling() {
-    for spacing in [1e-200, -1e-200, 1e200, -1e200] {
+    for spacing in [1e-200, -1e-200, 1e160, -1e160, 1e200, -1e200] {
         assert!(matches!(
             SavitzkyGolay::new_derivative(5, 2, 2, spacing),
             Err(Error::NumericalFailure)

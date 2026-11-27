@@ -307,7 +307,7 @@ fn derivative_scale(window: usize, derivative: usize, spacing: f64) -> Result<f6
     // Divide in this order to avoid overflowing (window - 1) * spacing.
     let step = (2.0 / (window - 1) as f64) / spacing;
     let scale = (0..derivative).fold(1.0, |scale, _| scale * step);
-    if !scale.is_finite() || scale == 0.0 {
+    if !scale.is_normal() {
         return Err(Error::NumericalFailure);
     }
     Ok(scale)
