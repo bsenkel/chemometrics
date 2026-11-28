@@ -222,11 +222,13 @@ impl Iot {
     }
 
     /// Number of pure component spectra.
+    #[must_use]
     pub fn components(&self) -> usize {
         self.components
     }
 
     /// Number of variables per spectrum.
+    #[must_use]
     pub fn variables(&self) -> usize {
         self.variables
     }

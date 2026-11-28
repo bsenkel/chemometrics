@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `SavitzkyGolay`'s `Debug` output shows its parameters instead of all
   coefficients.
+- Discarding the return value of `Detrend::new` or the accessor methods on
+  `Iot` and `Pca` now emits an `unused_must_use` compiler warning.
 
 ### Fixed
 

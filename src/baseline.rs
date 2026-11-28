@@ -76,6 +76,7 @@ impl Detrend {
     /// Any order is accepted; whether it fits a given spectrum depends on the
     /// spectrum's length and is reported by [`Self::apply`] and
     /// [`Self::apply_into`].
+    #[must_use]
     pub const fn new(polynomial_order: usize) -> Self {
         Self { polynomial_order }
     }

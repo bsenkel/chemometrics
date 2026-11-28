@@ -413,21 +413,25 @@ impl Pca {
     }
 
     /// Number of samples the model was fitted to.
+    #[must_use]
     pub fn samples(&self) -> usize {
         self.samples
     }
 
     /// Number of variables per sample.
+    #[must_use]
     pub fn variables(&self) -> usize {
         self.variables
     }
 
     /// Number of retained components.
+    #[must_use]
     pub fn components(&self) -> usize {
         self.components
     }
 
     /// Mean spectrum subtracted before the decomposition.
+    #[must_use]
     pub fn mean(&self) -> &[f64] {
         &self.mean
     }
@@ -440,23 +444,27 @@ impl Pca {
     /// given. Components with nearly equal eigenvalues are not
     /// determined by the data and may differ between platforms or library
     /// versions.
+    #[must_use]
     pub fn loadings(&self) -> &[f64] {
         &self.loadings
     }
 
     /// Loading vector of one component, or `None` if it does not exist.
+    #[must_use]
     pub fn loading(&self, component: usize) -> Option<&[f64]> {
         self.loadings.chunks_exact(self.variables).nth(component)
     }
 
     /// Training scores, `samples` × `components` row-major, or empty for a
     /// model loaded with [`Self::from_parts`].
+    #[must_use]
     pub fn scores(&self) -> &[f64] {
         &self.scores
     }
 
     /// Scores of one training sample, or `None` if it does not exist or the
     /// model was loaded with [`Self::from_parts`].
+    #[must_use]
     pub fn score(&self, sample: usize) -> Option<&[f64]> {
         self.scores.chunks_exact(self.components).nth(sample)
     }
@@ -466,6 +474,7 @@ impl Pca {
     ///
     /// Tools that divide by `samples` instead report eigenvalues smaller, and
     /// T² values larger, by the factor `samples / (samples − 1)`.
+    #[must_use]
     pub fn eigenvalues(&self) -> &[f64] {
         &self.eigenvalues[..self.components]
     }
@@ -478,6 +487,7 @@ impl Pca {
     /// they show how much further components would explain. Preprocessing such
     /// as SNV or detrending removes directions from the data, so trailing
     /// eigenvalues can be pure rounding.
+    #[must_use]
     pub fn all_eigenvalues(&self) -> &[f64] {
         &self.eigenvalues
     }
@@ -486,11 +496,13 @@ impl Pca {
     ///
     /// The total covers all variables, so the shares sum to one only when every
     /// component is retained.
+    #[must_use]
     pub fn explained_variance_ratio(&self) -> &[f64] {
         &self.ratios
     }
 
     /// Total variance of the centered training data.
+    #[must_use]
     pub fn total_variance(&self) -> f64 {
         self.total_variance
     }

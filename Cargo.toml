@@ -31,3 +31,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+
+[lints.clippy]
+must_use_candidate = "warn"
