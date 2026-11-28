@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Error::InvalidEigenvalueCount`, `Error::InvalidEigenvalues` and
   `Error::NonOrthonormalLoadings` for invalid parts passed to
   `Pca::from_parts`.
+- `Copy` for `MovingAverage`.
 
 ### Changed
 

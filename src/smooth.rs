@@ -51,7 +51,7 @@ fn map_windows(
 /// assert_eq!(smoothed, vec![1.0, 1.0, 2.0, 3.0, 3.0]);
 /// # Ok::<(), chemometrics::Error>(())
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct MovingAverage {
     window_length: usize,
 }
